@@ -13,7 +13,7 @@ develop-eggs/
 dist/
 downloads/
 eggs/
-lib/
+#lib/
 lib64/
 parts/
 sdist/
@@ -52,3 +52,7 @@ docs/_build/
 
 # PyBuilder
 target/
+
+credentials.py
+config/secret.py
+.log
