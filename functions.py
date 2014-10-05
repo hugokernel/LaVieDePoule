@@ -1,6 +1,7 @@
 
 import random
 import glob
+import time
 
 from config.general import FAKE_MODE
 if FAKE_MODE:
@@ -55,7 +56,7 @@ def read_w1_temperature(index, fahrenheit=False, maxretry=3, basedir='/sys/bus/w
             try:
                 with open(device_folder[item] + '/w1_slave', 'r') as file:
                     lines = file.readlines()
-            except IndexError:
+            except (IndexError, IOError):
                 out.append(None)
                 break
 
@@ -69,6 +70,7 @@ def read_w1_temperature(index, fahrenheit=False, maxretry=3, basedir='/sys/bus/w
                 break
 
             time.sleep(0.2)
+
             retry += 1
 
     return out if not len(out) or type(index) == list else out[0]

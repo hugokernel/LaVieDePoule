@@ -30,6 +30,8 @@ class GPIO:
 
     BOARD = 1
     IN = 0
+    OUT = 1
+
     RISING = 0
     FALLING = 0
     BOTH = 1
@@ -51,13 +53,17 @@ class GPIO:
         pass
 
     @staticmethod
-    def add_event_detect(a, b, callback, bouncetime):
+    def add_event_detect(a, b, callback, bouncetime=0):
         pass
 
     @staticmethod
     def input(index):
         GPIO.toggle = not GPIO.toggle
         return GPIO.toggle
+
+    @staticmethod
+    def output(index, value):
+        return
 
 class i2c:
     @staticmethod

@@ -216,25 +216,26 @@ def twit(message, takephoto=False, **kwargs):
         logger.info('Twit: %s' % message)
     else:
         logger.debug('Twit: %s' % message)
+        if takephoto:
+            IR_ON()
+            with PiCamera() as camera:
+                camera.resolution = (1024, 768)
+
+                if config.LOW_LIGHT:
+                    camera.framerate = Fraction(1, 6)
+                    camera.shutter_speed = 6000000
+                    #camera.exposure_mode = 'off'
+                    camera.ISO = 800
+                    # Give the camera a good long time to measure AWB
+                    # (you may wish to use fixed AWB instead)
+                    time.sleep(10)
+
+                camera.capture('image.jpg')
+
+                photo = open('image.jpg', 'rb')
+            IR_OFF()
+
         if t:
-            if takephoto:
-                IR_ON()
-                with PiCamera() as camera:
-                    camera.resolution = (1024, 768)
-
-                    if config.LOW_LIGHT:
-                        camera.framerate = Fraction(1, 6)
-                        camera.shutter_speed = 6000000
-                        #camera.exposure_mode = 'off'
-                        camera.ISO = 800
-                        # Give the camera a good long time to measure AWB
-                        # (you may wish to use fixed AWB instead)
-                        time.sleep(10)
-
-                    camera.capture('image.jpg')
-
-                    photo = open('image.jpg', 'rb')
-                IR_OFF()
             try:
                 if takephoto:
                     t.update_status_with_media(status=message, media=photo)
@@ -450,7 +451,8 @@ def get_sensor_data():
     return (vbatt, lux, temp, current, temp1, temp2, temp3)
 
 def twit_report(vbatt, lux, temp, current, temp1, temp2, temp3, takephoto=True):
-    twit(dialog.report % (temp, temp1, temp2, temp3, vbatt, current), takephoto=takephoto)
+    twit(dialog.report_light % (temp, lux, vbatt, current), takephoto=takephoto)
+    #twit(dialog.report % (temp, temp1, temp2, temp3, vbatt, current), takephoto=takephoto)
 
 class Report(threading.Thread):
 
@@ -478,8 +480,8 @@ class Report(threading.Thread):
 
             counter += 1
 
-            # Send tweet every hour
-            if counter == 60:
+            # Send tweet every 3 hours
+            if counter == 60 * 3:
                 twit_report(*sensors_data)
                 counter = 0
 

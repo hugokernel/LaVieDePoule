@@ -1,6 +1,7 @@
 # -*- coding: utf8 -*-
 
 report = 'Temperatures -> enceinte: %0.2f°C, nid 1: %0.2f°C, nid 2: %0.2f°C, ext: %0.2f°C, tension: %0.2fV, courant: %0.2fA'
+report_light = 'Temperature enceinte: %0.2f°C, luminosité: %0.2f, tension: %0.2fV, courant: %0.2fA'
 
 cot = (
     '@%username% {0}',
