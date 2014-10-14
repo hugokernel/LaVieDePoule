@@ -246,9 +246,10 @@ def twit(message, takephoto=False, **kwargs):
 
 class Events:
 
-    bouncetime = 2000
+    bouncetime = 10000
     events = {}
     pir_counter = 0
+    min_delay = 60 * 60
 
     inputs = {
        SWITCH0: 'switch0',
@@ -312,19 +313,25 @@ class Events:
     @bouncesleep
     @timer
     def door0_falling(self, channel, times):
-        logger.debug("Collecteur oeuf ferme ! (%s)", get_time(times[1]))
+        if times[0] > self.min_delay:
+            twit(dialog.collect_egg, time_last=get_time(times[0]))
+        else:
+            twit(dialog.collect_egg_light)
 
     @log
     @bouncesleep
     @timer
     def door0_rising(self, channel, times):
-        twit(dialog.collect_egg, time_last=get_time(times[0]))
+        logger.debug("Collecteur oeuf ferme ! (%s)", get_time(times[1]))
 
     @log
     @bouncesleep
     @timer
     def door1_falling(self, channel, times):
-        twit(dialog.enclosure_close, time=get_time(times[0]))
+        if times[0] > self.min_delay:
+            twit(dialog.enclosure_close, time=get_time(times[0]))
+        else:
+            twit(dialog.enclosure_close_light)
 
     @log
     @bouncesleep
@@ -336,13 +343,16 @@ class Events:
     @bouncesleep
     @timer
     def door2_falling(self, channel, times):
-        twit(dialog.garden_close, time=get_time(times[0]))
+        twit(dialog.garden_full)
 
     @log
     @bouncesleep
     @timer
     def door2_rising(self, channel, times):
-        twit(dialog.garden_full)
+        if times[0] > self.min_delay:
+            twit(dialog.garden_close, time=get_time(times[0]))
+        else:
+            twit(dialog.garden_close_light)
 
     #@bouncesleep
     @timer
@@ -571,6 +581,8 @@ Only in fake mode :
                     events.pir(PIR)
                 elif c.isdigit() and 3 < int(c) < 7:
                     thresholds_test([9, 0.29, 2], alerts, int(c) - 4)
+
+        time.sleep(3)
 
     kb.set_normal_term()
 

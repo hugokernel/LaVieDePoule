@@ -40,7 +40,6 @@ garden_full = (
 garden_close = (
     '{0}',
     (
-        (1, 'Toutes les bonnes choses ont une fin !'),
         (1, 'On rentre du jardin après %time% !'),
         (1, 'Après %time% de {0} dans le jardin, on rentre !', (
             ( 1, 'folie' ),
@@ -50,14 +49,27 @@ garden_close = (
     )
 )
 
+garden_close_light = (
+    '{0}',
+    (
+        (1, 'Toutes les bonnes choses ont une fin, nous rentrons du jardin !'),
+        (1, 'Fini le jardin, on rentre !'),
+    )
+)
+
 collect_egg = (
-    '{0} {1}',
+    '{0}',
+    (
+        (1, 'Collecte des oeufs ! La dernière date de %time_last% !'),
+    )
+)
+
+collect_egg_light = (
+    '{0}',
     (
         (1, 'Tiens, on vient collecter nos oeufs !'),
         (1, "C'est l'heure de la collecte des oeufs !"),
         (1, 'Hop, la main vient prendre nos oeufs !'),
-    ), (
-        (1, 'La dernière date de %time_last% !'),
     )
 )
 
@@ -75,8 +87,15 @@ enclosure = (
 enclosure_close = (
     '{0}',
     (
-        (1, 'Fermeture de la porte de {0} !', enclos),
         (1, 'Après %time%, on rentre de {0} !', enclos),
+    )
+)
+
+enclosure_close_light = (
+    '{0}',
+    (
+        (1, 'Fermeture de la porte de {0} !', enclos),
+        (1, 'On rentre de {0} !', enclos),
     )
 )
 
