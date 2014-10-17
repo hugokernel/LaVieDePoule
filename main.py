@@ -139,7 +139,7 @@ class Twitter(threading.Thread):
     def run(self):
 
         def str2dtime(date):
-            return datetime.strptime(date, '%a %b %d %H:%M:%S %z %Y')
+            return datetime.strptime(date, '%a %b %d %H:%M:%S +0000 %Y')
 
         while not self._stopevent.isSet():
 
@@ -152,6 +152,9 @@ class Twitter(threading.Thread):
             for mention in mentions:
 
                 if int(mention['id_str']) not in self.sources:
+
+                    if 'cot' not in mention['text'].lower():
+                        continue
 
                     message = speak(dialog.cot, username=mention['user']['screen_name'])
 
@@ -180,10 +183,8 @@ class Twitter(threading.Thread):
 
             time.sleep(60)
 
-#tthread = Twitter(t)
-#tthread.start()
-#while True:
-#    time.sleep(10)
+tthread = Twitter(t)
+tthread.start()
 
 '''
 # Get your "home" timeline
@@ -324,6 +325,9 @@ class Events:
     def door0_rising(self, channel, times):
         logger.debug("Collecteur oeuf ferme ! (%s)", get_time(times[1]))
 
+        # Power off led !
+        GPIO.output(LED, False)
+
     @log
     @bouncesleep
     @timer
@@ -398,8 +402,10 @@ def get_status_door(door):
 def get_string_from_lux(lux):
     if 0 < lux < 0.3:
         return 'Nuit'
-    elif 2.6 < lux < 5:
+    elif 2.3 < lux < 2.6:
         return 'Beau temps'
+    elif 2.6 < lux < 5:
+        return 'Super beau temps'
 
 def read_input():
     return [ GPIO.input(GPIOS[index]) for index in range(0, 6) ]
@@ -455,8 +461,8 @@ def get_sensor_data():
     if not temp3:
         temp3 = 0
 
-    logger.debug("VBatt: %0.2fV, Current: %0.2fA, LDR: %0.2fV, Temp: %0.2f, Temp 1: %0.2f, Temp 2: %0.2f, Temp ext: %0.2f" % (vbatt, current, lux, temp, temp1, temp2, temp3))
-    logger.debug("%s, %s, %s, LDR: %0.2fV (%s)" % (get_status_door(0), get_status_door(1), get_status_door(2), lux, get_string_from_lux(lux)))
+    logger.debug("VBatt: %0.2fV, Current: %0.2fA, LDR: %0.2fV (%s), Temp: %0.2f, Temp 1: %0.2f, Temp 2: %0.2f, Temp ext: %0.2f" % (vbatt, current, lux, get_string_from_lux(lux), temp, temp1, temp2, temp3))
+    logger.debug("%s, %s, %s" % (get_status_door(0), get_status_door(1), get_status_door(2)))
 
     return (vbatt, lux, temp, current, temp1, temp2, temp3)
 
@@ -476,7 +482,7 @@ class Report(threading.Thread):
     def run(self):
 
         # Update your status
-        twit('@%s Application start !' % config.TWITTER_ADMIN_ACCOUNT)
+        #twit('@%s Application start !' % config.TWITTER_ADMIN_ACCOUNT)
 
         counter = 0
 
@@ -582,7 +588,13 @@ Only in fake mode :
                 elif c.isdigit() and 3 < int(c) < 7:
                     thresholds_test([9, 0.29, 2], alerts, int(c) - 4)
 
-        time.sleep(3)
+        # Collecteur oeuf ouvert ?
+        if GPIO.input(SWITCH0):
+            for status in (True, False) * 6:
+                GPIO.output(LED, status)
+                time.sleep(0.5)
+        else:
+            time.sleep(3)
 
     kb.set_normal_term()
 
