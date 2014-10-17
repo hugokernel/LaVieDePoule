@@ -32,10 +32,12 @@ def speak(data):
 def read_w1_temperature(index, fahrenheit=False, maxretry=3, basedir='/sys/bus/w1/devices/'):
     '''
     Read temperature from 1Wire bus
-    todo: read 2 times and compares output
+    Todo:
+     * Read 2 times and compares output
+     * Index arg as sensor id array (ex: index = [ '10-xxxxx', '28-XXXXxx' ])
     '''
 
-    device_folder = glob.glob(basedir + '10-*')
+    device_folder = glob.glob(basedir + '??-*')
 
     def parse(data):
         while not data or data[0].strip()[-3:] != 'YES':

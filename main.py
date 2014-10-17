@@ -370,7 +370,16 @@ class Events:
 
     def wrapper(self, channel):
 
-        state = GPIO.input(channel)
+        # Another debouncer...
+        count = 0
+        last_state = -1
+        while True:
+            state = GPIO.input(channel)
+            count = count + 1 if last_state == state else 0
+            if count >= 3:
+                break
+            last_state = state
+            time.sleep(0.5)
 
         falling, rising = {
             SWITCH0:    (self.door0_falling, self.door0_rising),
@@ -406,6 +415,14 @@ def get_string_from_lux(lux):
         return 'Beau temps'
     elif 2.6 < lux < 5:
         return 'Super beau temps'
+
+def get_string_from_temperatures(*args):
+    string = []
+    for i, temp in enumerate(args):
+        if -20 < temp < 50:
+            sensor = dialog.sensors_map[i] + ': ' if len(dialog.sensors_map) > i else ''
+            string.append('%s%0.2f°C' % (sensor, temp))
+    return ', '.join(string)
 
 def read_input():
     return [ GPIO.input(GPIOS[index]) for index in range(0, 6) ]
@@ -451,24 +468,20 @@ def get_sensor_data():
     analog = read_analog()
     #vbatt, vpan, temp, current = analog[0] / 0.354, analog[1] / 0.167, analog[2] * 100, analog[3] * 10 / 6.8
     vbatt, lux, temp, current = analog[0] / 0.354, analog[1], analog[2] * 100, analog[3] * 10 / 6.8
-    #temp1, temp2, temp3 = read_w1_temperature([0, 1, 2])
-    temp1, temp2 = read_w1_temperature([0, 1])
-    temp3 = 0
-    if not temp1:
-        temp1 = 0
-    if not temp2:
-        temp2 = 0
-    if not temp3:
-        temp3 = 0
+    temp1, temp2, temp3 = read_w1_temperature([0, 1, 2])
+    #temp1, temp2 = read_w1_temperature([0, 1])
 
-    logger.debug("VBatt: %0.2fV, Current: %0.2fA, LDR: %0.2fV (%s), Temp: %0.2f, Temp 1: %0.2f, Temp 2: %0.2f, Temp ext: %0.2f" % (vbatt, current, lux, get_string_from_lux(lux), temp, temp1, temp2, temp3))
+    print temp1, temp2, temp3
+    tmp_string = get_string_from_temperatures(temp1, temp2, temp3)
+
+    logger.debug("VBatt: %0.2fV, Current: %0.2fA, LDR: %0.2fV (%s), Temperatures -> enceinte: %0.2f, %s" % (vbatt, current, lux, get_string_from_lux(lux), temp, tmp_string))
     logger.debug("%s, %s, %s" % (get_status_door(0), get_status_door(1), get_status_door(2)))
 
     return (vbatt, lux, temp, current, temp1, temp2, temp3)
 
 def twit_report(vbatt, lux, temp, current, temp1, temp2, temp3, takephoto=True):
-    twit(dialog.report_light % (temp, lux, vbatt, current), takephoto=takephoto)
-    #twit(dialog.report % (temp, temp1, temp2, temp3, vbatt, current), takephoto=takephoto)
+    #twit(dialog.report_light % (temp, lux, vbatt, current), takephoto=takephoto)
+    twit(dialog.report % (temp, temp1, temp2, temp3, vbatt, current), takephoto=takephoto)
 
 class Report(threading.Thread):
 
@@ -550,7 +563,7 @@ Only in fake mode :
             c = kb.getch()
             if c == '?':
                 print(help_string)
-            elif c == 'q' or ord(c) == 27:
+            elif c == 'q':
                 print('Quit...')
                 if 'rthread' in globals():
                     rthread.stop()
