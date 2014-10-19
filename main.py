@@ -347,16 +347,16 @@ class Events:
     @bouncesleep
     @timer
     def door2_falling(self, channel, times):
-        twit(dialog.garden_full)
+        if times[0] > self.min_delay:
+            twit(dialog.garden_close, time=get_time(times[0]))
+        else:
+            twit(dialog.garden_close_light)
 
     @log
     @bouncesleep
     @timer
     def door2_rising(self, channel, times):
-        if times[0] > self.min_delay:
-            twit(dialog.garden_close, time=get_time(times[0]))
-        else:
-            twit(dialog.garden_close_light)
+        twit(dialog.garden_full)
 
     #@bouncesleep
     @timer
@@ -409,12 +409,14 @@ def get_status_door(door):
     return ("%s: %s" % (desc, 'ouvert' if GPIO.input(io) else 'ferme'))
 
 def get_string_from_lux(lux):
+    string = ''
     if 0 < lux < 0.3:
-        return 'Nuit'
+        string = dialog.lux_map[0]
     elif 2.3 < lux < 2.6:
-        return 'Beau temps'
+        string = dialog.lux_map[1]
     elif 2.6 < lux < 5:
-        return 'Super beau temps'
+        string = dialog.lux_map[2]
+    return '%0.2f%s' % (lux, (' (' + string + ')' if string else ''))
 
 def get_string_from_temperatures(*args):
     string = []
@@ -471,17 +473,15 @@ def get_sensor_data():
     temp1, temp2, temp3 = read_w1_temperature([0, 1, 2])
     #temp1, temp2 = read_w1_temperature([0, 1])
 
-    print temp1, temp2, temp3
-    tmp_string = get_string_from_temperatures(temp1, temp2, temp3)
-
-    logger.debug("VBatt: %0.2fV, Current: %0.2fA, LDR: %0.2fV (%s), Temperatures -> enceinte: %0.2f, %s" % (vbatt, current, lux, get_string_from_lux(lux), temp, tmp_string))
-    logger.debug("%s, %s, %s" % (get_status_door(0), get_status_door(1), get_status_door(2)))
+    logger.debug("Vin: %0.2fV, A: %0.2fA, lux: %s, Temperatures -> enceinte: %0.2f, %s, Portes -> %s, %s, %s" % \
+        (vbatt, current, get_string_from_lux(lux), temp, get_string_from_temperatures(temp1, temp2, temp3), get_status_door(0), get_status_door(1), get_status_door(2)))
 
     return (vbatt, lux, temp, current, temp1, temp2, temp3)
 
 def twit_report(vbatt, lux, temp, current, temp1, temp2, temp3, takephoto=True):
     #twit(dialog.report_light % (temp, lux, vbatt, current), takephoto=takephoto)
-    twit(dialog.report % (temp, temp1, temp2, temp3, vbatt, current), takephoto=takephoto)
+
+    twit(dialog.report % (temp, get_string_from_temperatures(temp1, temp2, temp3), get_string_from_lux(lux), vbatt, current), takephoto=takephoto)
 
 class Report(threading.Thread):
 
