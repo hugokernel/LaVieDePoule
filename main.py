@@ -20,24 +20,24 @@ import dialog
 
 import sqlalchemy as sa
 
-from config import general as config
-
-from twython import Twython, TwythonError, TwythonRateLimitError
-if config.FAKE_MODE:
-    #from fake import Twython, TwythonError, PiCamera, GPIO
-    from fake import PiCamera, GPIO
-else:
-    from picamera import PiCamera
-    import RPi.GPIO as GPIO
-
 from lib.kbhit import KBHit
 from lib.raspiomix import Raspiomix as Raspiomix_Origin
 from lib.RainbowHandler import RainbowLoggingHandler
 from lib.speak import speak
 from lib.freesms import send_sms
-from config.secret import *
-#TWITTER_OAUTH_TOKEN, TWITTER_OAUTH_SECRET, TWITTER_CONSUMER_KEY, TWITTER_CONSUMER_SECRET
-from functions import read_w1_temperature, read_analog, elapsed_time
+
+from config import general as config
+from config import secret
+
+if config.FAKE_MODE:
+    from fake import PiCamera, GPIO, Twython, TwythonError, TwythonRateLimitError, read_w1_temperature
+else:
+    from twython import Twython, TwythonError, TwythonRateLimitError
+    from picamera import PiCamera
+    import RPi.GPIO as GPIO
+    from functions import read_w1_temperature
+
+from functions import read_analog, elapsed_time
 
 logger = logging.getLogger()
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -88,7 +88,7 @@ IR_OFF = lambda: GPIO.output(RELAY, True)
 
 IR_OFF()
 
-t = Twython(TWITTER_CONSUMER_KEY, TWITTER_CONSUMER_SECRET, TWITTER_OAUTH_TOKEN, TWITTER_OAUTH_SECRET)
+t = Twython(secret.TWITTER_CONSUMER_KEY, secret.TWITTER_CONSUMER_SECRET, secret.TWITTER_OAUTH_TOKEN, secret.TWITTER_OAUTH_SECRET)
 #t = None
 
 db = sa.create_engine('sqlite:///data.sqlite')
@@ -114,8 +114,56 @@ EventsTable = sa.Table('events', metadata,
     sa.Column('date',   sa.DateTime),
 )
 
+SensorsTable = sa.Table('sensors', metadata,
+    sa.Column('id',     sa.Integer, primary_key=True),
+    sa.Column('type',   sa.String(16)),
+    sa.Column('name',   sa.String(32)),
+    sa.Column('value',  sa.String(128)),
+    sa.Column('date',   sa.DateTime),
+)
+
 metadata.create_all(db)
 
+class Sensors(threading.Thread):
+
+    sensors = {}
+    results = {}
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self._stopevent = threading.Event()
+
+    def stop(self):
+        self._stopevent.set()
+
+    def declare(self, name, callback, params=None):
+        self.sensors[name] = (callback, params)
+
+    def get(self, name):
+        return self.results if name in self.results else None
+
+    def run(self):
+        while not self._stopevent.isSet():
+
+            # Read all sensors data
+            print(self.sensors)
+            for name, data in self.sensors.items():
+                callback, params = data
+
+                self.results[name] = callback()
+
+            time.sleep(2)
+
+def toto():
+    return 1
+
+s = Sensors()
+s.declare('toto', toto)
+s.run()
+
+while True:
+    print(s.get('toto'))
+    time.sleep(1)
 
 class Twitter(threading.Thread):
 
@@ -153,6 +201,7 @@ class Twitter(threading.Thread):
 
                 if int(mention['id_str']) not in self.sources:
 
+                    # Answer only mention contains 'cot'
                     if 'cot' not in mention['text'].lower():
                         continue
 
@@ -325,7 +374,7 @@ class Events:
     def door0_rising(self, channel, times):
         logger.debug("Collecteur oeuf ferme ! (%s)", get_time(times[1]))
 
-        # Power off led !
+        # Power off status led !
         GPIO.output(LED, False)
 
     @log
@@ -416,14 +465,14 @@ def get_string_from_lux(lux):
         string = dialog.lux_map[1]
     elif 2.6 < lux < 5:
         string = dialog.lux_map[2]
-    return '%0.2f%s' % (lux, (' (' + string + ')' if string else ''))
+    return '%0.1f%s' % (lux, (' (' + string + ')' if string else ''))
 
 def get_string_from_temperatures(*args):
     string = []
     for i, temp in enumerate(args):
         if -20 < temp < 50:
             sensor = dialog.sensors_map[i] + ': ' if len(dialog.sensors_map) > i else ''
-            string.append('%s%0.2f°C' % (sensor, temp))
+            string.append('%s%0.1f°C' % (sensor, temp))
     return ', '.join(string)
 
 def read_input():
@@ -438,7 +487,7 @@ alerts = (
 '''
 def twit_and_sms(message):
     twit(('@%s ' % config.TWITTER_ADMIN_ACCOUNT) + message)
-    send_sms(FREESMS_LOGIN, FREESMS_KEY, 'Poulailler: ' message)
+    send_sms(secret.FREESMS_LOGIN, secret.FREESMS_KEY, 'Poulailler: ' message)
 '''
 
 def thresholds_test(values, alerts, force=None, last=[]):
@@ -453,7 +502,7 @@ def thresholds_test(values, alerts, force=None, last=[]):
                 logger.info(message)
             else:
                 twit(('@%s ' % config.TWITTER_ADMIN_ACCOUNT) + message)
-                send_sms(FREESMS_LOGIN, FREESMS_KEY, 'Poulailler: ' + message)
+                send_sms(secret.FREESMS_LOGIN, secret.FREESMS_KEY, 'Poulailler: ' + message)
 
             out.append(index)
 
@@ -471,7 +520,6 @@ def get_sensor_data():
     #vbatt, vpan, temp, current = analog[0] / 0.354, analog[1] / 0.167, analog[2] * 100, analog[3] * 10 / 6.8
     vbatt, lux, temp, current = analog[0] / 0.354, analog[1], analog[2] * 100, analog[3] * 10 / 6.8
     temp1, temp2, temp3 = read_w1_temperature([0, 1, 2])
-    #temp1, temp2 = read_w1_temperature([0, 1])
 
     logger.debug("Vin: %0.2fV, A: %0.2fA, lux: %s, Temperatures -> enceinte: %0.2f, %s, Portes -> %s, %s, %s" % \
         (vbatt, current, get_string_from_lux(lux), temp, get_string_from_temperatures(temp1, temp2, temp3), get_status_door(0), get_status_door(1), get_status_door(2)))
@@ -603,6 +651,7 @@ Only in fake mode :
 
         # Collecteur oeuf ouvert ?
         if GPIO.input(SWITCH0):
+            # Status led blinking
             for status in (True, False) * 6:
                 GPIO.output(LED, status)
                 time.sleep(0.5)

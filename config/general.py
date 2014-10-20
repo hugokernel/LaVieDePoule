@@ -1,5 +1,7 @@
 
-FAKE_MODE = False
+FAKE_MODE = True
+
+TWITTER_ON = False
 
 LOW_LIGHT = False
 

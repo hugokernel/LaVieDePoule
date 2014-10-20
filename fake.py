@@ -6,8 +6,13 @@ class Twython():
         pass
     def update_status_with_media(self, status, media):
         pass
+    def get_mentions_timeline(self):
+        return []
 
 class TwythonError(Exception):
+    pass
+
+class TwythonRateLimitError(TwythonError):
     pass
 
 class PiCamera:
@@ -94,4 +99,7 @@ class adc:
             for channel in channels:
                 out.append(self.getVoltage(channel))
             return out
+
+def read_w1_temperature(index, fahrenheit=False, maxretry=3, basedir=None):
+    return [ 10.2 ] * len(index)
 
