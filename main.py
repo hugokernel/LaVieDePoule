@@ -124,6 +124,7 @@ SensorsTable = sa.Table('sensors', metadata,
 
 metadata.create_all(db)
 
+'''
 class Sensors(threading.Thread):
 
     sensors = {}
@@ -164,6 +165,7 @@ s.run()
 while True:
     print(s.get('toto'))
     time.sleep(1)
+'''
 
 class Twitter(threading.Thread):
 
