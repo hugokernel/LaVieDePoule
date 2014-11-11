@@ -1,11 +1,11 @@
 # -*- coding: utf8 -*-
 
-lux_map = ('nuit', 'beau temp', 'super beau temp')
+lux_map = ('nuit', 'beau temps', 'super beau temps')
 
-sensors_map = ('extérieur', 'nid 1', 'nid 2')
+sensors_map = ('enceinte', 'extérieur', 'nid 1', 'nid 2')
 
 #report = 'Temperatures -> enceinte: %0.2f°C, nid 1: %0.2f°C, nid 2: %0.2f°C, ext: %0.2f°C, tension: %0.2fV, courant: %0.2fA'
-report = 'Temperatures -> enceinte: %0.1f°C, %s, luminosité: %s, tension: %0.1fV, courant: %0.1fA'
+report = 'Temperatures -> %s, luminosité: %s, tension: %0.1fV, courant: %0.1fA'
 report_light = 'Temperature enceinte: %0.1f°C, luminosité: %0.1f, tension: %0.1fV, courant: %0.1fA'
 
 cot = (
@@ -20,7 +20,7 @@ cot = (
 )
 
 enclos = (
-    (1, 'la basse-court'),
+    (1, 'la basse-cour'),
     (1, 'l\'enclos')
 )
 

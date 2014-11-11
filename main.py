@@ -523,15 +523,15 @@ def get_sensor_data():
     vbatt, lux, temp, current = analog[0] / 0.354, analog[1], analog[2] * 100, analog[3] * 10 / 6.8
     temp1, temp2, temp3 = read_w1_temperature([0, 1, 2])
 
-    logger.debug("Vin: %0.2fV, A: %0.2fA, lux: %s, Temperatures -> enceinte: %0.2f, %s, Portes -> %s, %s, %s" % \
-        (vbatt, current, get_string_from_lux(lux), temp, get_string_from_temperatures(temp1, temp2, temp3), get_status_door(0), get_status_door(1), get_status_door(2)))
+    logger.debug("Vin: %0.2fV, A: %0.2fA, lux: %s, Temperatures -> %s, Portes -> %s, %s, %s" % \
+        (vbatt, current, get_string_from_lux(lux), get_string_from_temperatures(temp, temp1, temp2, temp3), get_status_door(0), get_status_door(1), get_status_door(2)))
 
     return (vbatt, lux, temp, current, temp1, temp2, temp3)
 
 def twit_report(vbatt, lux, temp, current, temp1, temp2, temp3, takephoto=True):
     #twit(dialog.report_light % (temp, lux, vbatt, current), takephoto=takephoto)
 
-    twit(dialog.report % (temp, get_string_from_temperatures(temp1, temp2, temp3), get_string_from_lux(lux), vbatt, current), takephoto=takephoto)
+    twit(dialog.report % (get_string_from_temperatures(temp, temp1, temp2, temp3), get_string_from_lux(lux), vbatt, current), takephoto=takephoto)
 
 class Report(threading.Thread):
 
