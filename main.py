@@ -37,7 +37,7 @@ else:
     import RPi.GPIO as GPIO
     from functions import read_w1_temperature
 
-from functions import read_analog, elapsed_time
+from functions import elapsed_time
 
 logger = logging.getLogger()
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -72,10 +72,12 @@ PIR = Raspiomix.IO2
 RELAY = Raspiomix.IO4
 LED = Raspiomix.IO5
 
+raspi = Raspiomix()
+
 GPIO.setmode(GPIO.BOARD)
 GPIO.setwarnings(False)
 
-for index in GPIOS: #[ SWITCH0, SWITCH1, SWITCH2 ]:
+for index in GPIOS:
     GPIO.setup(index, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 GPIO.setup(PIR, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -518,7 +520,7 @@ def thresholds_test(values, alerts, force=None, last=[]):
     return out
 
 def get_sensor_data():
-    analog = read_analog()
+    analog = raspi.readAdc()
     #vbatt, vpan, temp, current = analog[0] / 0.354, analog[1] / 0.167, analog[2] * 100, analog[3] * 10 / 6.8
     vbatt, lux, temp, current = analog[0] / 0.354, analog[1], analog[2] * 100, analog[3] * 10 / 6.8
     temp1, temp2, temp3 = read_w1_temperature([0, 1, 2])

@@ -3,16 +3,6 @@ import random
 import glob
 import time
 
-from config.general import FAKE_MODE
-if FAKE_MODE:
-    #from fake import i2c
-    from fake import adc
-else:
-    #import quick2wire.i2c as i2c
-    from lib import adc
-
-from lib.raspiomix import Raspiomix
-
 def speak(data):
     '''
     Speak random text
@@ -76,50 +66,6 @@ def read_w1_temperature(index, fahrenheit=False, maxretry=3, basedir='/sys/bus/w
             retry += 1
 
     return out if not len(out) or type(index) == list else out[0]
-
-def read_analog():
-    '''
-    Read analog value
-    ''' 
-    a = adc.adc()
-    return a.getVoltages()
-
-    '''
-    varDivisior = 64 # from pdf sheet on adc addresses and config
-    varMultiplier = (3.3/varDivisior)/1000
-    varMultiplier = 0.0000386
-
-    channels = [ 0, 0, 0, 0 ]
-
-    with i2c.I2CMaster() as bus:
-        def changechannel(address, adcConfig):
-            bus.transaction(i2c.writing_bytes(address, adcConfig))
-
-        def getadcreading(address):
-            h, m, l ,s = bus.transaction(i2c.reading(address,4))[0]
-            while (s & 128):
-                h, m, l, s = bus.transaction(i2c.reading(address,4))[0]
-            # shift bits to product result
-            t = ((h & 0b00000001) << 16) | (m << 8) | l
-            # check if positive or negative number and invert if needed
-            if (h > 128):
-                t = ~(0x020000 - t)
-            return t * varMultiplier
-
-        changechannel(Raspiomix.I2C_ADC_ADDRESS, 0x9C)
-        channels[0] = round(getadcreading(Raspiomix.I2C_ADC_ADDRESS), 2)
-
-        changechannel(Raspiomix.I2C_ADC_ADDRESS, 0xBC)
-        channels[1] = round(getadcreading(Raspiomix.I2C_ADC_ADDRESS), 2)
-
-        changechannel(Raspiomix.I2C_ADC_ADDRESS, 0xDC)
-        channels[2] = round(getadcreading(Raspiomix.I2C_ADC_ADDRESS), 2)
-
-        changechannel(Raspiomix.I2C_ADC_ADDRESS, 0xFC)
-        channels[3] = round(getadcreading(Raspiomix.I2C_ADC_ADDRESS), 2)
-
-        return channels
-    '''
 
 def elapsed_time(seconds, suffixes=['y','w','d','h','m','s'], add_s=False, separator=' '):
     """
