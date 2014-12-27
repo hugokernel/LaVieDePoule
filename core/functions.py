@@ -49,7 +49,33 @@ def elapsed_time(seconds, suffixes=['y','w','d','h','m','s'], add_s=False, separ
      
     return separator.join(time)
 
-def read_w1_temperature(sensors, fahrenheit=False, maxretry=3, basedir='/sys/bus/w1/devices/'):
+class FifoBuffer:
+    
+    size = -1
+    default = None
+
+    def __init__(self, data=default, size=-1):
+        if data:
+            self.size = len(data)
+            self.data = data
+        else:
+            self.size = size
+            self.data = [ default ] * size
+
+    def isFull(self):
+        for val in self.data:
+            if val == self.default:
+                return False
+        return True
+
+    def append(self, x):
+        self.data.pop(0)
+        self.data.append(x)
+
+    def get(self):
+        return self.data
+
+def onewire_read_temperature(sensors, fahrenheit=False, maxretry=3, basedir='/sys/bus/w1/devices/'):
     '''
     Read temperature from 1Wire bus
     Todo:
@@ -81,6 +107,9 @@ def read_w1_temperature(sensors, fahrenheit=False, maxretry=3, basedir='/sys/bus
 
         path = get_device_path(sensor)
 
+        if not path:
+            continue
+
         retry = 0
         while True:
             lines = None
@@ -104,12 +133,22 @@ def read_w1_temperature(sensors, fahrenheit=False, maxretry=3, basedir='/sys/bus
 
             retry += 1
 
-    return out if not len(out) or type(sensors) == list else out[0]
+    if type(sensors) == str:
+        if not len(out):
+            return None
+        else:
+            return out[0]
+    else:
+        return out
+    #return None if type(sensors) == str else out if not len(out) or type(sensors) == list else out[0]
 
 if __name__ == '__main__':
-    result = read_w1_temperature([0, 1, 2], basedir='/tmp/')
-    print result
+    result = onewire_read_temperature([0, 1, 2], basedir='/tmp/')
+    print(result)
 
-    result = read_w1_temperature(['10-0008008ba2a9', '28-0000061496ff', '10-0008008bceb5'], basedir='/tmp/')
-    print result
+    result = onewire_read_temperature(['10-0008008ba2a9', '28-0000061496ff', '10-0008008bceb5'], basedir='/tmp/')
+    print(result)
+
+    result = onewire_read_temperature('28-0000061496ff', basedir='/tmp/')
+    print(result)
 

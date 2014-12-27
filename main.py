@@ -8,6 +8,7 @@
 |_______ (____  /\___/  |__|\___  /_______  /\___  |____|   \____/|____/|____/\___  >
         \/    \/                \/        \/     \/                               \/"""
 
+from __future__ import print_function
 import sys
 import time
 import logging
@@ -16,28 +17,36 @@ from fractions import Fraction
 import threading
 from datetime import datetime
 
-import dialog
-
-import sqlalchemy as sa
+try:
+    reload
+except NameError:
+    from importlib import reload
 
 from lib.kbhit import KBHit
-from lib.raspiomix import Raspiomix as Raspiomix_Origin
 from lib.RainbowHandler import RainbowLoggingHandler
-from lib.speak import speak
 from lib.freesms import send_sms
+
+from core.db import TwitterActivityTable, EventsTable, SensorsTable, sqla, db
+from core.functions import elapsed_time, FifoBuffer
+from core.sensors import Sensors
+from core.speak import speak
+from core import dialog
 
 from config import general as config
 from config import secret
 
 if config.FAKE_MODE:
-    from fake import PiCamera, GPIO, Twython, TwythonError, TwythonRateLimitError, read_w1_temperature
+    from core.fake import (  PiCamera, GPIO,
+                            Twython, TwythonError, TwythonRateLimitError,
+                            onewire_read_temperature, Raspiomix as Raspiomix_Origin,
+                            Camera )
 else:
+    from lib.raspiomix import Raspiomix as Raspiomix_Origin
+    from core.camera import Camera
     from twython import Twython, TwythonError, TwythonRateLimitError
     from picamera import PiCamera
     import RPi.GPIO as GPIO
-    from functions import read_w1_temperature
-
-from functions import elapsed_time
+    from core.functions import onewire_read_temperature
 
 logger = logging.getLogger()
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -52,6 +61,9 @@ logger.addHandler(fileHandler)
 
 logger.setLevel(logging.DEBUG)
 
+'''
+Configure GPIO
+'''
 class Raspiomix(Raspiomix_Origin):
     IO4 = 7
     IO5 = 16
@@ -87,87 +99,144 @@ GPIO.setup(RELAY, GPIO.OUT)
 
 IR_ON = lambda: GPIO.output(RELAY, False)
 IR_OFF = lambda: GPIO.output(RELAY, True)
-
 IR_OFF()
 
-t = Twython(secret.TWITTER_CONSUMER_KEY, secret.TWITTER_CONSUMER_SECRET, secret.TWITTER_OAUTH_TOKEN, secret.TWITTER_OAUTH_SECRET)
-#t = None
+'''
+Configure misc
+'''
+cam = Camera()
+cam.setCallback(IR_ON, IR_OFF)
 
-db = sa.create_engine('sqlite:///data.sqlite')
-db.echo = False
+if config.TWITTER_ON:
+    twt = Twython(secret.TWITTER_CONSUMER_KEY, secret.TWITTER_CONSUMER_SECRET, secret.TWITTER_OAUTH_TOKEN, secret.TWITTER_OAUTH_SECRET)
 
-metadata = sa.MetaData()
-TwitterActivityTable = sa.Table('twitter_activity', metadata,
-    sa.Column('id',                 sa.Integer, primary_key=True),
-    sa.Column('source_id',          sa.Integer),
-    sa.Column('source_reply_id',    sa.Integer),
-    sa.Column('source_user_name',   sa.String(255)),
-    sa.Column('source_content',     sa.String(160)),
-    sa.Column('source_date',        sa.DateTime),
-    sa.Column('reply_id',           sa.Integer),
-    sa.Column('reply_content',      sa.String(160)),
-    sa.Column('reply_date',         sa.DateTime),
-)
+def detect_increase(name, value, values=[None] * 4):
+    '''
+    Detect increase of value
+    Todo: verify augmentation
+    '''
+    fifo = FifoBuffer(data=values)
+    fifo.append(value)
 
-EventsTable = sa.Table('events', metadata,
-    sa.Column('id',     sa.Integer, primary_key=True),
-    sa.Column('input',  sa.Integer),
-    sa.Column('type',   sa.String(160)),
-    sa.Column('date',   sa.DateTime),
-)
+    # Detect if increase
+    if fifo.isFull():
+        last = 0
+        increase = False
+        for i in range(len(values)):
+            if last:
+                increase = values[i] > last
+                if not increase:
+                    break
+            last = values[i]
 
-SensorsTable = sa.Table('sensors', metadata,
-    sa.Column('id',     sa.Integer, primary_key=True),
-    sa.Column('type',   sa.String(16)),
-    sa.Column('name',   sa.String(32)),
-    sa.Column('value',  sa.String(128)),
-    sa.Column('date',   sa.DateTime),
-)
+        if increase:
+            print('%s sensor increase !' % name)
 
-metadata.create_all(db)
+def save_to_db(name, value, last_save={}):
+
+    try:
+        last_save[name]
+    except KeyError:
+        last_save[name] = 0
+
+    # Save in db every 5 min
+    if not last_save[name] or time.time() - last_save[name] > config.SAVE_TO_DB_EVERY:
+        _, _, _, type = sensor.sensors[name]
+        db.execute(SensorsTable.insert().values(
+            type=type,
+            name=name,
+            value=value,
+            date=datetime.now(),
+        ))
+
+        last_save[name] = time.time()
+
+def notinrange(name, value, validrange):
+    logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, result, validrange))
 
 '''
-class Sensors(threading.Thread):
+for i in range(0, 20):
+    detect_increase(i)
 
-    sensors = {}
-    results = {}
+for i in range(0, 20):
+    detect_increase(i)
+'''
 
-    def __init__(self):
-        threading.Thread.__init__(self)
-        self._stopevent = threading.Event()
+sensor = Sensors()
 
-    def stop(self):
-        self._stopevent.set()
+sensor.declare('vbatt',      lambda: raspi.readAdc(0) / 0.354,    type=sensor.TYPE_VOLTAGE)
+sensor.declare('current',    lambda: raspi.readAdc(3) * 10 / 6.8, type='current')
+sensor.declare('lux',        lambda: raspi.readAdc(1),            type='luminosity')
 
-    def declare(self, name, callback, params=None):
-        self.sensors[name] = (callback, params)
+with sensor.attributes(type='switch'):
+    sensor.declare('door0',      lambda: GPIO.input(SWITCH0))
+    sensor.declare('door1',      lambda: GPIO.input(SWITCH1))
+    sensor.declare('door2',      lambda: GPIO.input(SWITCH2))
 
-    def get(self, name):
-        return self.results if name in self.results else None
+with sensor.attributes(validrange=(-20, 50), type=sensor.TYPE_TEMPERATURE):
+    sensor.declare('temp',   lambda: raspi.readAdc(2) * 100) # Enceinte
+    sensor.declare('1w_0',   onewire_read_temperature, (config.ONEWIRE_SENSOR0,)) # Extérieur
+    sensor.declare('1w_1',   onewire_read_temperature, (config.ONEWIRE_SENSOR1,)) # Nid 1
+    sensor.declare('1w_2',   onewire_read_temperature, (config.ONEWIRE_SENSOR2,)) # Nid 2
 
-    def run(self):
-        while not self._stopevent.isSet():
+sensor.setNotInRangeCallback(notinrange)
 
-            # Read all sensors data
-            print(self.sensors)
-            for name, data in self.sensors.items():
-                callback, params = data
+sensor.setReadyCallback(detect_increase, '1w_1')
+sensor.setReadyCallback(save_to_db)
 
-                self.results[name] = callback()
+sensor.start()
 
-            time.sleep(2)
+'''
+print('<')
+import matplotlib.pyplot as plt
+fig = plt.figure()
+print('.')
+ax = fig.add_subplot(111)
+x_points = xrange(0,9)
+y_points = xrange(0,9)
+p = ax.plot(x_points, y_points, 'b')
+ax.set_xlabel('x-points')
+ax.set_ylabel('y-points')
+ax.set_title('Simple XY point plot')
+#fig.show()
+fig.savefig('out.png')
+print('>')
+'''
 
-def toto():
-    return 1
-
-s = Sensors()
-s.declare('toto', toto)
-s.run()
-
+"""
 while True:
-    print(s.get('toto'))
+    print(sensor.getLastValue())
     time.sleep(1)
-'''
+
+i = 0
+while True:
+    #print(sensor.get('toto'))
+    #print(sensor.getLastValue('1w_0', maxage))
+
+    #print(sensor.getLastValue('1w_0', maxage=3, withtimestamp=True))
+    #print(sensor.getLastValue(('1w_0', '1w_1', '1w_2'), maxage=3))
+    #print(sensor.getLastValue(maxage=3))
+
+    if i > 3:
+        #vbatt, lux, temp, current = analog[0] / 0.354, analog[1], analog[2] * 100, analog[3] * 10 / 6.8
+        #temp1, temp2, temp3 = onewire_read_temperature(config.ONEWIRE_SENSORS)
+
+        values = sensor.getLastValue(('vbatt', 'lux', 'temp', 'current'), maxage=config.MAX_AGE)
+        vbatt, lux, temp = values['vbatt'], values['lux'], values['temp']
+        print(vbatt, lux, temp)
+
+    '''
+    if i > 5:
+        val = sensor.getLastValue('1w_0', maxage=2)
+        print('Value:', val, ', timestamp: ', time.time())
+
+        vals = sensor.getLastValue(maxage=2)
+        print(vals)
+    '''
+
+    time.sleep(0.5)
+    i += 1
+"""
 
 class Twitter(threading.Thread):
 
@@ -181,7 +250,7 @@ class Twitter(threading.Thread):
         self.twitter = twitter
 
         # Load all response
-        s = sa.select([TwitterActivityTable.c.source_id])
+        s = sqla.select([TwitterActivityTable.c.source_id])
         for id, in db.execute(s):
             self.sources.append(id)
 
@@ -234,26 +303,27 @@ class Twitter(threading.Thread):
                     except (TwythonError, TwythonRateLimitError) as e:
                         logger.error(e)
 
-            time.sleep(60)
+            time.sleep(60 * 2)
 
-tthread = Twitter(t)
-tthread.start()
+if config.TWITTER_ON:
+    tthread = Twitter(twt)
+    tthread.start()
 
 '''
 # Get your "home" timeline
-t.statuses.home_timeline()
+twt.statuses.home_timeline()
 
 # Get a particular friend's timeline
-t.statuses.user_timeline(screen_name="billybob")
+twt.statuses.user_timeline(screen_name="billybob")
 
 # to pass in GET/POST parameters, such as `count`
-t.statuses.home_timeline(count=5)
+twt.statuses.home_timeline(count=5)
 
 # to pass in the GET/POST parameter `id` you need to use `_id`
-t.statuses.oembed(_id=1234567890)
+twt.statuses.oembed(_id=1234567890)
 
 # Send a direct message
-t.direct_messages.new(
+twt.direct_messages.new(
     user="billybob",
     text="I think yer swell!")
 '''
@@ -262,41 +332,19 @@ def get_time(seconds):
     return elapsed_time(seconds, ['année', 'semaine', 'jour', 'heure', 'minute', 'seconde'], add_s=True)
 
 def twit(message, takephoto=False, **kwargs):
-    global t
-
     message = speak(message, **kwargs) if type(message) == tuple else message
 
-    if config.FAKE_MODE:
-        logger.info('Twit: %s' % message)
-    else:
-        logger.debug('Twit: %s' % message)
-        if takephoto:
-            IR_ON()
-            with PiCamera() as camera:
-                camera.resolution = (1024, 768)
+    logger.info('Twit: %s' % message)
 
-                if config.LOW_LIGHT:
-                    camera.framerate = Fraction(1, 6)
-                    camera.shutter_speed = 6000000
-                    #camera.exposure_mode = 'off'
-                    camera.ISO = 800
-                    # Give the camera a good long time to measure AWB
-                    # (you may wish to use fixed AWB instead)
-                    time.sleep(10)
-
-                camera.capture('image.jpg')
-
-                photo = open('image.jpg', 'rb')
-            IR_OFF()
-
-        if t:
-            try:
-                if takephoto:
-                    t.update_status_with_media(status=message, media=photo)
-                else:
-                    t.update_status(status=message)
-            except TwythonError as e:
-                logger.error(e)
+    if config.TWITTER_ON:
+        try:
+            if takephoto:
+                if cam.takePhoto():
+                    twt.update_status_with_media(status=message, media=open(cam.photo_file, 'r'))
+            else:
+                twt.update_status(status=message)
+        except TwythonError as e:
+            logger.error(e)
 
 class Events:
 
@@ -474,7 +522,7 @@ def get_string_from_lux(lux):
 def get_string_from_temperatures(*args):
     string = []
     for i, temp in enumerate(args):
-        if -20 < temp < 50:
+        if temp and -20 < temp < 50:
             sensor = dialog.sensors_map[i] + ': ' if len(dialog.sensors_map) > i else ''
             string.append('%s%0.1f°C' % (sensor, temp))
     return ', '.join(string)
@@ -520,10 +568,14 @@ def thresholds_test(values, alerts, force=None, last=[]):
     return out
 
 def get_sensor_data():
-    analog = raspi.readAdc()
-    #vbatt, vpan, temp, current = analog[0] / 0.354, analog[1] / 0.167, analog[2] * 100, analog[3] * 10 / 6.8
-    vbatt, lux, temp, current = analog[0] / 0.354, analog[1], analog[2] * 100, analog[3] * 10 / 6.8
-    temp1, temp2, temp3 = read_w1_temperature([0, 1, 2])
+
+    #analog = raspi.readAdc()
+    #vbatt, lux, temp, current = analog[0] / 0.354, analog[1], analog[2] * 100, analog[3] * 10 / 6.8
+    #temp1, temp2, temp3 = onewire_read_temperature(config.ONEWIRE_SENSORS)
+
+    values = sensor.getLastValue(('vbatt', 'lux', 'temp', 'current', '1w_0', '1w_1', '1w_2'), maxage=config.MAX_AGE)
+    vbatt, lux, temp, current = values['vbatt'], values['lux'], values['temp'], values['current']
+    temp1, temp2, temp3 = values['1w_0'], values['1w_1'], values['1w_2']
 
     logger.debug("Vin: %0.2fV, A: %0.2fA, lux: %s, Temperatures -> %s, Portes -> %s, %s, %s" % \
         (vbatt, current, get_string_from_lux(lux), get_string_from_temperatures(temp, temp1, temp2, temp3), get_status_door(0), get_status_door(1), get_status_door(2)))
@@ -572,9 +624,20 @@ if __name__ == "__main__":
 
     print(__doc__)
 
+    # Wait while all sensor not ready !
+    print('Waiting for all sensors ready...', end='')
+    i = 0
+    while not sensor.isSensorsReady():
+        time.sleep(1)
+        i += 1
+        if i > 3:
+            break
+    print('Ok !')
+
     help_string = '''La vie de poule
 
  ?  This help
+ c  Reload config
  p  Capture image and send to Twitter
  r  Send report to Twitter
  v  Modify verbosity
@@ -622,6 +685,9 @@ Only in fake mode :
                 if 'tthread' in globals():
                     tthread.stop()
                 break
+            elif c == 'c':
+                print('Reload config !')
+                reload(config)
             elif c == 'p':
                 twit('Cheese !', takephoto=True)
             elif c == 'r':
