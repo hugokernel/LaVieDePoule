@@ -305,10 +305,6 @@ class Twitter(threading.Thread):
 
             time.sleep(60 * 2)
 
-if config.TWITTER_ON:
-    tthread = Twitter(twt)
-    tthread.start()
-
 '''
 # Get your "home" timeline
 twt.statuses.home_timeline()
@@ -495,8 +491,6 @@ class Events:
         else:
             falling(channel)
 
-events = Events()
-
 def get_status_door(door):
 
     doors = [
@@ -630,9 +624,15 @@ if __name__ == "__main__":
     while not sensor.isSensorsReady():
         time.sleep(1)
         i += 1
-        if i > 3:
+        if i > 10:
             break
     print('Ok !')
+
+    events = Events()
+
+    if config.TWITTER_ON:
+        tthread = Twitter(twt)
+        tthread.start()
 
     help_string = '''La vie de poule
 
