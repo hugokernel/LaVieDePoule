@@ -1,44 +1,44 @@
 
+import sys
+import datetime
+import calendar
+
+from collections import OrderedDict
+
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import matplotlib.dates as dates
 
-import datetime
-
 from core.db import SensorsTable, sqla, db
 
-#print(SensorsTable.c)
-
-def get_data_from_days(day=None, pastdays=None, lastday=None):
+def get_data_from_range(days=None):
     '''
     Get data from days
-    - day : The date (ex: day=datetime.datetime.utcnow())
-    - pastdays : If 0 : only current day, if 1, yesterday + today, etc...
-    - lastday : If 0 : get the data from current day
+    - days :
+      Get the data from the range, range is a tuple (x, y) with x
+      is the old day and y the most recent day :
+      ex:
+        (0, 0)  : get only the current day
+        (-1, 0) : get yesterday + current day
+        (1, 1)  : get tomorrow
     '''
+
+    def get_day(day):
+        if type(day) is int:
+            return datetime.datetime.utcnow() + datetime.timedelta(days=day)
+        elif type(day) is str:
+            return datetime.strptime(day, '%Y-%m-%d %H:%M:%S')
+        elif type(day) == datetime.datetime:
+            return day
+        else:
+            raise Exception('Incorrect day type !')
 
     c = SensorsTable.c
 
-    if day:
-        #date1 = date2 = str(day)[:10]
-        date1 = date2 = day
-    elif lastday is not None:
-        date = datetime.datetime.utcnow()
-        #date1 = str(date - datetime.timedelta(days=lastday))[:10]
-        date1 = date - datetime.timedelta(days=lastday)
-        date2 = date1
-    elif pastdays is not None:
-        date = datetime.datetime.utcnow()
-        #date1 = str(date - datetime.timedelta(days=pastdays))[:10]
-        #date2 = str(date)[:10]
-        date1 = date - datetime.timedelta(days=pastdays)
-        date2 = date
-
-    #date1 += ' 00:00:00'
-    #date2 += ' 23:59:59'
-    date1 = date1.strftime('%Y-%m-%d 00:00:00')
-    date2 = date2.strftime('%Y-%m-%d 23:59:59')
+    start, end = days
+    date1 = get_day(start).strftime('%Y-%m-%d 00:00:00')
+    date2 = get_day(end).strftime('%Y-%m-%d 23:59:59')
 
     query = sqla.select([c.name, c.value, c.date]).where(c.date>=date1).where(c.date<=date2)
 
@@ -59,19 +59,12 @@ def get_data_from_days(day=None, pastdays=None, lastday=None):
         except KeyError:
             time[name] = []
 
-        #print(date, date.strftime('%Y-%m-%d %H:%M:%S'))
         data[name].append(value)
-        time[name].append(date)#.strftime('%Y-%m-%d %H:%M:%S'))
+        time[name].append(date)
 
     return data, time
 
-def generate_plot(data, time, informations, xlabel, ylabel):
-
-    '''
-    red_patch = mpatches.Patch(color='red', label='Enceinte')
-    blue_patch = mpatches.Patch(color='blue', label='Nid 2')
-    yellow_patch = mpatches.Patch(color='yellow', label='Luminosité')
-    '''
+def generate_plot(data, time, informations, xlabel, ylabel, dateformat='%H:%M'):
 
     params = []
     patches = []
@@ -105,46 +98,23 @@ def generate_plot(data, time, informations, xlabel, ylabel):
         params.append(data[name])
         params.append(color)
 
-    #print(data.keys())
-    #plt.plot([1,2,3,4])
-    #data['1w_1'].reverse()
-    #plt.plot(data['temp'], 'r--', data['1w_2'], 'bs')
-    #plt.plot(data['temp'], 'r', data['1w_2'], 'g', data['vbatt'], 'b', data['current'], 'y')
-
-    '''
-    plt.plot(*params)
-    plt.gcf().autofmt_xdate()
-    '''
-
-
     fig, ax = plt.subplots()
     ax.plot(*params)
-    ax.xaxis.set_major_formatter(dates.DateFormatter('%d %b %H:%M'))
+    #ax.xaxis.set_major_formatter(dates.DateFormatter('%d %b %H:%M'))
+    ax.xaxis.set_major_formatter(dates.DateFormatter(dateformat))
     fig.autofmt_xdate()
-
-    #print(len(params))
-    #print(informations)
-    #ax.fill(params[12], params[13], 'orange', alpha=.5)
 
     # Fill...
     for fill in fills:
         ax.fill(fill[0], fill[1], fill[2], alpha=.5)
 
-    fig.legend(handles=patches, loc=2, labels=labels)
+    #fig.legend(handles=patches, loc=1, labels=labels)
+    #fig.legend(handles=patches, labels=labels, loc='upper center', bbox_to_anchor=(0.5, 1.05),
+    #      ncol=3, fancybox=True, shadow=True)
 
-    '''
-    plt.plot(
-        data['temp'], 'red', # Enceinte
-        data['1w_2'], 'blue', # Nid 2
-        data['lux'],  'yellow',
+    lgd = fig.legend(handles=patches, labels=labels, loc='upper center', bbox_to_anchor=(0.5, .99),
+          fancybox=True, shadow=True, ncol=3)
 
-        #data['1w_1'], 'b', # Extérieur
-        #data['1w_0'], 'b', # Nid 1
-    )
-    '''
-
-    #plt.text(25, 10, r'$\mu=100,\ \sigma=15$')
-    #plt.axis([0, 50, -5, 40])
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
@@ -155,43 +125,43 @@ def generate_plot(data, time, informations, xlabel, ylabel):
     '''
 
     plt.grid(True)
-    #plt.show()
-    plt.savefig('test.png')#, dpi=1)#, dpi=10) 
+    plt.savefig('test.png', bbox_extra_artists=(lgd,))#, bbox_inches='tight')#, dpi=1)#, dpi=10) 
 
 if __name__ == '__main__':
 
-    #data, time = get_data_from_days(day=datetime.datetime.utcnow())
-    data, time = get_data_from_days(pastdays=4)
-    #data, time = get_data_from_days(lastday=1)
+    info = OrderedDict()
+    info['1w_0'] = ('Extérieur',  'violet')
+    info['temp'] = ('Enceinte',   'red')
+    info['1w_1'] = ('Nid 1',      'green')
+    info['1w_2'] = ('Nid 2',      'blue')
+    info['lux']  = ('Luminosité', ( 'orange', True ))
 
-    from collections import OrderedDict
-    i = OrderedDict()
-    i['1w_0'] = ('Extérieur',  'violet')
-    i['temp'] = ('Enceinte',   'red')
-    i['1w_1'] = ('Nid 1',      'green')
-    i['1w_2'] = ('Nid 2',      'blue')
-    i['lux']  = ('Luminosité', ( 'orange', True ))
+    def generate_plot_from_range(days, dateformat='%H:%M'):
+        data, time = get_data_from_range(days)
+        generate_plot(data, time, info, 'Temps', 'Températures', dateformat=dateformat)
 
-    generate_plot(data, time, i, 'Temps', 'Températures')
+    if sys.argv[1] == 'today':
+        #data, time = get_data_from_interval(lastday=0)
+        #generate_plot(data, time, info, 'Temps', 'Températures', dateformat='%d %b %H:%M')
+        generate_plot_from_range((0, 0), dateformat='%H:%M')
+    elif sys.argv[1] == 'yesterday':
+        generate_plot_from_range((-1, -1), dateformat='%H:%M')
+    elif sys.argv[1] == 'lastweek':
+        generate_plot_from_range((-7, -1), dateformat='%d %b %H:%M')
+    elif sys.argv[1] == 'lastmonth':
+        
+        lastmonth = datetime.datetime.utcnow().replace(day=1) - datetime.timedelta(days=1)
+        start = lastmonth.replace(day=1)
 
-    '''
-    import datetime
-    import random
-    import matplotlib.pyplot as plt
+        year, month = [ int(data) for data in lastmonth.strftime('%Y,%m').split(',') ]
+        _, daycount = calendar.monthrange(year, month)
 
-    # make up some data
-    x = [datetime.datetime.now() + datetime.timedelta(hours=i) for i in range(12)]
-    y = [i+random.gauss(0,1) for i,_ in enumerate(x)]
+        end = start + datetime.timedelta(days=daycount - 1)
 
-    print(x)
-    print(y)
-
-    # plot
-    plt.plot(x,y)#, label='Super')#, 'r')
-    # beautify the x-labels
-    plt.gcf().autofmt_xdate()
-
-    #plt.show()
-    plt.savefig('test.png')#, dpi=1)#, dpi=10) 
-    '''
+        generate_plot_from_range((start, end), dateformat='%d %b %H:%M')
+    elif sys.argv[1] == 'lastyear':
+        #generate_plot_from_range(365, dateformat='%d %b %H:%M')
+        print('Not implemented !')
+    else:
+        print('Help !')
 
