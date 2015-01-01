@@ -18,8 +18,6 @@ class Sensors(threading.Thread):
 
     sensors = {}
 
-    sensors_ready = False
-
     '''
     Stored last value with timestamp
     '''
@@ -82,8 +80,28 @@ class Sensors(threading.Thread):
         '''
         self.callbacks_notinrange[name] = callback
 
-    def isSensorsReady(self):
-        return self.sensors_ready
+    def isSensorsReady(self, sensors=[]):
+        '''
+        Return if sensors is ready
+        '''
+        ready = True
+        for sensor in sensors if sensors else self.sensors:
+            if not sensor in self.results:
+                ready = False
+                break
+
+            _, data = self.results[sensor]
+            if not data:
+                ready = False
+                break
+        return ready
+
+    def waitForSensorsReady(self, sensors):
+        '''
+        Wait for sensors is ready
+        '''
+        while not self.isSensorsReady(sensors):
+            time.sleep(1)
 
     def run(self):
         while not self._stopevent.isSet():
@@ -116,18 +134,6 @@ class Sensors(threading.Thread):
 
                 # All good ? Save value !
                 self.results[name] = (result, time.time())
-
-                # Test if all sensors is set
-                if not self.sensors_ready:
-                    ready = True
-                    for _, data in self.results.items():
-                        value, _ = data
-                        if not value:
-                            ready = False
-                            break
-
-                    if ready:
-                        self.sensors_ready = True
 
             time.sleep(self.PERIOD)
 

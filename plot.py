@@ -12,6 +12,8 @@ import matplotlib.dates as dates
 
 from core.db import SensorsTable, sqla, db
 
+EXPORT_FILE = '/tmp/plot.png'
+
 def get_data_from_range(days=None):
     '''
     Get data from days
@@ -28,7 +30,12 @@ def get_data_from_range(days=None):
         if type(day) is int:
             return datetime.datetime.utcnow() + datetime.timedelta(days=day)
         elif type(day) is str:
-            return datetime.strptime(day, '%Y-%m-%d %H:%M:%S')
+            for item in ('%Y-%m-%d', '%Y-%m-%d %H:%M:%S'):
+                try:
+                    return datetime.datetime.strptime(day, item)
+                except ValueError:
+                    pass
+            raise Exception('Incorrect day type !')
         elif type(day) == datetime.datetime:
             return day
         else:
@@ -73,8 +80,7 @@ def generate_plot(data, time, informations, xlabel, ylabel, dateformat='%H:%M'):
     for name, info in informations.items():
         desc, attributes = info
         if type(attributes) == str:
-            color = attributes
-            fill = False
+            color, fill = attributes, False
         else:
             color, fill = attributes
 
@@ -125,7 +131,7 @@ def generate_plot(data, time, informations, xlabel, ylabel, dateformat='%H:%M'):
     '''
 
     plt.grid(True)
-    plt.savefig('test.png', bbox_extra_artists=(lgd,))#, bbox_inches='tight')#, dpi=1)#, dpi=10) 
+    plt.savefig(EXPORT_FILE, bbox_extra_artists=(lgd,))#, bbox_inches='tight')#, dpi=1)#, dpi=10)
 
 if __name__ == '__main__':
 
@@ -134,34 +140,53 @@ if __name__ == '__main__':
     info['temp'] = ('Enceinte',   'red')
     info['1w_1'] = ('Nid 1',      'green')
     info['1w_2'] = ('Nid 2',      'blue')
+    #info['lux']  = ('Luminosité', 'orange') #( 'orange', True ))
     info['lux']  = ('Luminosité', ( 'orange', True ))
 
     def generate_plot_from_range(days, dateformat='%H:%M'):
         data, time = get_data_from_range(days)
         generate_plot(data, time, info, 'Temps', 'Températures', dateformat=dateformat)
 
-    if sys.argv[1] == 'today':
-        #data, time = get_data_from_interval(lastday=0)
-        #generate_plot(data, time, info, 'Temps', 'Températures', dateformat='%d %b %H:%M')
-        generate_plot_from_range((0, 0), dateformat='%H:%M')
-    elif sys.argv[1] == 'yesterday':
-        generate_plot_from_range((-1, -1), dateformat='%H:%M')
-    elif sys.argv[1] == 'lastweek':
-        generate_plot_from_range((-7, -1), dateformat='%d %b %H:%M')
-    elif sys.argv[1] == 'lastmonth':
-        
-        lastmonth = datetime.datetime.utcnow().replace(day=1) - datetime.timedelta(days=1)
-        start = lastmonth.replace(day=1)
+    def usage():
+        print('''Usage :
+- {name} today      Generate plot with current day data
+- {name} yesterday  Generate plot with yesterday data
+- {name} lastweek   Generate plot with last week data
+- {name} lastmonth  Generate plot with last month data
+- {name} range x y  Generate plot from range x to y (where x and y are in datetime format)
+        '''.format(name=sys.argv[0]))
 
-        year, month = [ int(data) for data in lastmonth.strftime('%Y,%m').split(',') ]
-        _, daycount = calendar.monthrange(year, month)
+    try:
+        if len(sys.argv) <= 1 or sys.argv[1] == 'help':
+            usage()
+        elif sys.argv[1] == 'today':
+            generate_plot_from_range((0, 0), dateformat='%H:%M')
+        elif sys.argv[1] == 'yesterday':
+            generate_plot_from_range((-1, -1), dateformat='%H:%M')
+        elif sys.argv[1] == 'lastweek':
+            generate_plot_from_range((-7, -1), dateformat='%d %b %H:%M')
+        elif sys.argv[1] == 'lastmonth':
 
-        end = start + datetime.timedelta(days=daycount - 1)
+            lastmonth = datetime.datetime.utcnow().replace(day=1) - datetime.timedelta(days=1)
+            start = lastmonth.replace(day=1)
 
-        generate_plot_from_range((start, end), dateformat='%d %b %H:%M')
-    elif sys.argv[1] == 'lastyear':
-        #generate_plot_from_range(365, dateformat='%d %b %H:%M')
-        print('Not implemented !')
-    else:
-        print('Help !')
+            #year, month = [ int(data) for data in lastmonth.strftime('%Y,%m').split(',') ]
+            year, month = map(lambda a: int(a), lastmonth.strftime('%Y,%m').split(','))
+            _, daycount = calendar.monthrange(year, month)
+
+            end = start + datetime.timedelta(days=daycount - 1)
+
+            generate_plot_from_range((start, end), dateformat='%d %b %H:%M')
+        elif sys.argv[1] == 'range':
+            generate_plot_from_range((sys.argv[2], sys.argv[3]), dateformat='%d %b %H:%M')
+        else:
+            usage()
+
+        if sys.argv[len(sys.argv) - 1] == 'tweet':
+            from config import secret
+            twt = Twython(secret.TWITTER_CONSUMER_KEY, secret.TWITTER_CONSUMER_SECRET, secret.TWITTER_OAUTH_TOKEN, secret.TWITTER_OAUTH_SECRET)
+            twt.update_status_with_media(status='Météo de la journée passée', media=open(EXPORT_FILE, 'r'))
+
+    except Exception as e:
+        print('Error while generating data (%s) !' % e)
 

@@ -101,15 +101,6 @@ IR_ON = lambda: GPIO.output(RELAY, False)
 IR_OFF = lambda: GPIO.output(RELAY, True)
 IR_OFF()
 
-'''
-Configure misc
-'''
-cam = Camera()
-cam.setCallback(IR_ON, IR_OFF)
-
-if config.TWITTER_ON:
-    twt = Twython(secret.TWITTER_CONSUMER_KEY, secret.TWITTER_CONSUMER_SECRET, secret.TWITTER_OAUTH_TOKEN, secret.TWITTER_OAUTH_SECRET)
-
 def detect_increase(name, value, values=[None] * 4):
     '''
     Detect increase of value
@@ -162,6 +153,53 @@ for i in range(0, 20):
     detect_increase(i)
 '''
 
+class PirActivity():
+
+    interval = 5.0
+
+    activities = []
+    startat = False
+
+    def __init__(self):
+        self.startat = time.time()
+
+    def add(self):
+        self.clean()
+        self.activities.append(time.time()) 
+
+    def clean(self):
+        now = time.time()
+        new = []
+        for activity in self.activities:
+            if activity + self.interval < now:
+                continue
+            new.append(activity)
+        self.activities = new
+
+    def isReady(self):
+        '''
+        Ensure that interval is expired
+        '''
+        return self.startat + self.interval < time.time()
+
+    def get(self):
+        return len(self.activities)
+
+'''
+a = 0
+while True:
+    try:
+        time.sleep(0.5)
+        pira.add()
+        a += 1
+    except KeyboardInterrupt:
+        import sys
+        print(pira.get())
+        sys.exit()
+'''
+
+pira = PirActivity()
+
 sensor = Sensors()
 
 sensor.declare('vbatt',      lambda: raspi.readAdc(0) / 0.354,    type=sensor.TYPE_VOLTAGE)
@@ -179,29 +217,14 @@ with sensor.attributes(validrange=(-20, 50), type=sensor.TYPE_TEMPERATURE):
     sensor.declare('1w_1',   onewire_read_temperature, (config.ONEWIRE_SENSOR1,)) # Nid 1
     sensor.declare('1w_2',   onewire_read_temperature, (config.ONEWIRE_SENSOR2,)) # Nid 2
 
+sensor.declare('pir',   pira.get, type='activity')
+
 sensor.setNotInRangeCallback(notinrange)
 
 sensor.setReadyCallback(detect_increase, '1w_1')
 sensor.setReadyCallback(save_to_db)
 
 sensor.start()
-
-'''
-print('<')
-import matplotlib.pyplot as plt
-fig = plt.figure()
-print('.')
-ax = fig.add_subplot(111)
-x_points = xrange(0,9)
-y_points = xrange(0,9)
-p = ax.plot(x_points, y_points, 'b')
-ax.set_xlabel('x-points')
-ax.set_ylabel('y-points')
-ax.set_title('Simple XY point plot')
-#fig.show()
-fig.savefig('out.png')
-print('>')
-'''
 
 """
 while True:
@@ -458,12 +481,16 @@ class Events:
     #@bouncesleep
     @timer
     def pir(self, channel, times):
+        pira.add()
+
+        '''
         self.pir_counter += 1 if times[0] < 1 else -self.pir_counter
         print('Pir !', times, self.pir_counter)
         if self.pir_counter == 2:
             self.saveLog(channel)
             logger.debug("Pir event detected !")
             self.pir_counter = 0
+        '''
 
     def wrapper(self, channel):
 
@@ -619,14 +646,22 @@ if __name__ == "__main__":
     print(__doc__)
 
     # Wait while all sensor not ready !
-    print('Waiting for all sensors ready...', end='')
-    i = 0
-    while not sensor.isSensorsReady():
+    print('Waiting for sensors ready...', end='')
+    sensor.waitForSensorsReady(('vbatt', 'current', 'lux', 'temp'))
+
+    while not pira.isReady():
         time.sleep(1)
-        i += 1
-        if i > 10:
-            break
+
     print('Ok !')
+
+    '''
+    Configure misc
+    '''
+    cam = Camera()
+    cam.setCallback(IR_ON, IR_OFF)
+
+    if config.TWITTER_ON:
+        twt = Twython(secret.TWITTER_CONSUMER_KEY, secret.TWITTER_CONSUMER_SECRET, secret.TWITTER_OAUTH_TOKEN, secret.TWITTER_OAUTH_SECRET)
 
     events = Events()
 
