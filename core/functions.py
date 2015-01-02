@@ -49,6 +49,9 @@ def elapsed_time(seconds, suffixes=['y','w','d','h','m','s'], add_s=False, separ
      
     return separator.join(time)
 
+def get_time(seconds):
+    return elapsed_time(seconds, ['année', 'semaine', 'jour', 'heure', 'minute', 'seconde'], add_s=True)
+
 class FifoBuffer:
     
     size = -1
@@ -60,7 +63,7 @@ class FifoBuffer:
             self.data = data
         else:
             self.size = size
-            self.data = [ default ] * size
+            self.data = [ self.default ] * size
 
     def isFull(self):
         for val in self.data:

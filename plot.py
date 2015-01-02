@@ -1,3 +1,4 @@
+# -*- coding: utf8 -*-
 
 import sys
 import datetime
@@ -43,9 +44,10 @@ def get_data_from_range(days=None):
 
     c = SensorsTable.c
 
-    start, end = days
-    date1 = get_day(start).strftime('%Y-%m-%d 00:00:00')
-    date2 = get_day(end).strftime('%Y-%m-%d 23:59:59')
+    date1, date2 = get_day(days[0]), get_day(days[1])
+    if str(date1) == date1.strftime('%Y-%m-%d 00:00:00') and str(date2) == date2.strftime('%Y-%m-%d 00:00:00'):
+        date1 = date1.strftime('%Y-%m-%d 00:00:00')
+        date2 = date2.strftime('%Y-%m-%d 23:59:59')
 
     query = sqla.select([c.name, c.value, c.date]).where(c.date>=date1).where(c.date<=date2)
 
@@ -142,6 +144,8 @@ if __name__ == '__main__':
     info['1w_2'] = ('Nid 2',      'blue')
     #info['lux']  = ('Luminosité', 'orange') #( 'orange', True ))
     info['lux']  = ('Luminosité', ( 'orange', True ))
+
+    info['pir'] = ('PIR',         'black')
 
     def generate_plot_from_range(days, dateformat='%H:%M'):
         data, time = get_data_from_range(days)

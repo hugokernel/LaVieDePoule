@@ -27,13 +27,12 @@ from lib.RainbowHandler import RainbowLoggingHandler
 from lib.freesms import send_sms
 
 from core.db import TwitterActivityTable, EventsTable, SensorsTable, sqla, db
-from core.functions import elapsed_time, FifoBuffer
+from core.functions import FifoBuffer
 from core.sensors import Sensors
 from core.speak import speak
 from core import dialog
 
-from config import general as config
-from config import secret
+from config import general as config, secret
 
 if config.FAKE_MODE:
     from core.fake import (  PiCamera, GPIO,
@@ -101,58 +100,6 @@ IR_ON = lambda: GPIO.output(RELAY, False)
 IR_OFF = lambda: GPIO.output(RELAY, True)
 IR_OFF()
 
-def detect_increase(name, value, values=[None] * 4):
-    '''
-    Detect increase of value
-    Todo: verify augmentation
-    '''
-    fifo = FifoBuffer(data=values)
-    fifo.append(value)
-
-    # Detect if increase
-    if fifo.isFull():
-        last = 0
-        increase = False
-        for i in range(len(values)):
-            if last:
-                increase = values[i] > last
-                if not increase:
-                    break
-            last = values[i]
-
-        if increase:
-            print('%s sensor increase !' % name)
-
-def save_to_db(name, value, last_save={}):
-
-    try:
-        last_save[name]
-    except KeyError:
-        last_save[name] = 0
-
-    # Save in db every 5 min
-    if not last_save[name] or time.time() - last_save[name] > config.SAVE_TO_DB_EVERY:
-        _, _, _, type = sensor.sensors[name]
-        db.execute(SensorsTable.insert().values(
-            type=type,
-            name=name,
-            value=value,
-            date=datetime.now(),
-        ))
-
-        last_save[name] = time.time()
-
-def notinrange(name, value, validrange):
-    logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, result, validrange))
-
-'''
-for i in range(0, 20):
-    detect_increase(i)
-
-for i in range(0, 20):
-    detect_increase(i)
-'''
-
 class PirActivity():
 
     interval = 5.0
@@ -200,7 +147,70 @@ while True:
 
 pira = PirActivity()
 
-sensor = Sensors()
+sensor = Sensors(1 if config.FAKE_MODE else 10)
+
+@sensor.detect_increase(name='1w_1', unit_per_minut=60, measure_count=10)
+def detect_increase(name, value):
+    print('Increase detected !')
+
+@sensor.detect_decrease(name='1w_1', unit_per_minut=60, measure_count=10)
+def detect_decrease(name, value):
+    print('Decrease detected !')
+
+@sensor.set_ready()
+def save_to_db(name, value, last_save={}):
+
+    try:
+        last_save[name]
+    except KeyError:
+        last_save[name] = 0
+
+    # Save in db every 5 min
+    if not last_save[name] or time.time() - last_save[name] > config.SAVE_TO_DB_EVERY:
+        _, _, _, type = sensor.sensors[name]
+        db.execute(SensorsTable.insert().values(
+            type=type,
+            name=name,
+            value=value,
+            date=datetime.now(),
+        ))
+
+        last_save[name] = time.time()
+
+@sensor.set_not_in_range()
+def notinrange(name, value, validrange):
+    logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, value, validrange))
+
+@sensor.set_threshold_callback(config.TEMP_ALERT,    'temp')
+@sensor.set_threshold_callback(config.VOLTAGE_ALERT, 'vbatt')
+@sensor.set_threshold_callback(config.CURRENT_ALERT, 'current')
+def alerts(name, value, validrange, last={}):
+
+    # Save alert time !
+    if name not in last:
+        last[name] = time.time()
+    else:
+        # Only one alert each 24h
+        if last[name] + 60 * 60 * 24 > time.time():
+            return
+
+        last[name] = time.time()
+
+    messages = {
+        'vbatt':    'Vbatt voltage (%0.2fV) not in range (thresholds: %s) !',
+        'current':  'Current (%0.2fA) not in range (thresholds: %s) !',
+        'temp':     'Main temperature (%i°C) not in range (thresholds: %s) !'
+    }
+
+    message = messages[name] % (value, validrange)
+
+    if config.FAKE_MODE:
+        logger.info(message)
+    else:
+        if config.TWITTER_ON:
+            twit(('@%s ' % config.TWITTER_ADMIN_ACCOUNT) + message)
+        send_sms(secret.FREESMS_LOGIN, secret.FREESMS_KEY, 'Poulailler: ' + message)
+
 
 sensor.declare('vbatt',      lambda: raspi.readAdc(0) / 0.354,    type=sensor.TYPE_VOLTAGE)
 sensor.declare('current',    lambda: raspi.readAdc(3) * 10 / 6.8, type='current')
@@ -213,18 +223,27 @@ with sensor.attributes(type='switch'):
 
 with sensor.attributes(validrange=(-20, 50), type=sensor.TYPE_TEMPERATURE):
     sensor.declare('temp',   lambda: raspi.readAdc(2) * 100) # Enceinte
-    sensor.declare('1w_0',   onewire_read_temperature, (config.ONEWIRE_SENSOR0,)) # Extérieur
+    #sensor.declare('1w_0',   onewire_read_temperature, (config.ONEWIRE_SENSOR0,)) # Extérieur
     sensor.declare('1w_1',   onewire_read_temperature, (config.ONEWIRE_SENSOR1,)) # Nid 1
-    sensor.declare('1w_2',   onewire_read_temperature, (config.ONEWIRE_SENSOR2,)) # Nid 2
+    #sensor.declare('1w_2',   onewire_read_temperature, (config.ONEWIRE_SENSOR2,)) # Nid 2
 
 sensor.declare('pir',   pira.get, type='activity')
 
-sensor.setNotInRangeCallback(notinrange)
+#sensor.setNotInRangeCallback(lambda name, value, validrange: logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, value, validrange)))
+#sensor.setThresholdCallback(config.TEMP_ALERT,      alerts, 'temp')
+#sensor.setThresholdCallback(config.VOLTAGE_ALERT,   alerts, 'vbatt')
+#sensor.setThresholdCallback(config.CURRENT_ALERT,   alerts, 'current')
+#sensor.setReadyCallback(save_to_db)
 
-sensor.setReadyCallback(detect_increase, '1w_1')
-sensor.setReadyCallback(save_to_db)
+#sensor.setReadyCallback(detect_increase, '1w_1')
 
-sensor.start()
+'''
+for i in range(0, 20):
+    detect_increase(i)
+
+for i in range(0, 20):
+    detect_increase(i)
+'''
 
 """
 while True:
@@ -346,9 +365,6 @@ twt.direct_messages.new(
     user="billybob",
     text="I think yer swell!")
 '''
-
-def get_time(seconds):
-    return elapsed_time(seconds, ['année', 'semaine', 'jour', 'heure', 'minute', 'seconde'], add_s=True)
 
 def twit(message, takephoto=False, **kwargs):
     message = speak(message, **kwargs) if type(message) == tuple else message
@@ -548,52 +564,10 @@ def get_string_from_temperatures(*args):
             string.append('%s%0.1f°C' % (sensor, temp))
     return ', '.join(string)
 
-def read_input():
-    return [ GPIO.input(GPIOS[index]) for index in range(0, 6) ]
-
-alerts = (
-    ( config.VOLTAGE_ALERT, 'Vbatt voltage (%0.2fV) not in range (thresholds: %s) !'),
-    ( config.CURRENT_ALERT, 'Current (%0.2fA) not in range (thresholds: %s) !'),
-    ( config.TEMP_ALERT,    'Main temperature (%i°C) not in range (thresholds: %s) !')
-)
-
-'''
-def twit_and_sms(message):
-    twit(('@%s ' % config.TWITTER_ADMIN_ACCOUNT) + message)
-    send_sms(secret.FREESMS_LOGIN, secret.FREESMS_KEY, 'Poulailler: ' message)
-'''
-
-def thresholds_test(values, alerts, force=None, last=[]):
-    out = []
-    index = 0
-    for thresholds, message in alerts:
-        # Only first alert, skip other !
-        if index not in last and (not config.FAKE_MODE and not thresholds[0] < values[index] < thresholds[1] or force is not None and force == index):
-            message = message % (values[index], thresholds)
-
-            if config.FAKE_MODE:
-                logger.info(message)
-            else:
-                twit(('@%s ' % config.TWITTER_ADMIN_ACCOUNT) + message)
-                send_sms(secret.FREESMS_LOGIN, secret.FREESMS_KEY, 'Poulailler: ' + message)
-
-            out.append(index)
-
-            if index not in last:
-                last.append(index)
-        index += 1
-
-    if not out:
-        last = []
-
-    return out
+#def read_input():
+#    return [ GPIO.input(GPIOS[index]) for index in range(0, 6) ]
 
 def get_sensor_data():
-
-    #analog = raspi.readAdc()
-    #vbatt, lux, temp, current = analog[0] / 0.354, analog[1], analog[2] * 100, analog[3] * 10 / 6.8
-    #temp1, temp2, temp3 = onewire_read_temperature(config.ONEWIRE_SENSORS)
-
     values = sensor.getLastValue(('vbatt', 'lux', 'temp', 'current', '1w_0', '1w_1', '1w_2'), maxage=config.MAX_AGE)
     vbatt, lux, temp, current = values['vbatt'], values['lux'], values['temp'], values['current']
     temp1, temp2, temp3 = values['1w_0'], values['1w_1'], values['1w_2']
@@ -625,17 +599,11 @@ class Report(threading.Thread):
         counter = 0
 
         while not self._stopevent.isSet():
-
-            sensors_data = get_sensor_data()
-            vbatt, lux, temp, current, temp1, temp2, temp3 = sensors_data
-
-            # Test thresholds
-            thresholds_test([vbatt, current, temp], alerts)
-
             counter += 1
 
             # Send tweet every 3 hours
             if counter == 60 * 3:
+                sensors_data = get_sensor_data()
                 twit_report(*sensors_data)
                 counter = 0
 
@@ -644,6 +612,14 @@ class Report(threading.Thread):
 if __name__ == "__main__":
 
     print(__doc__)
+
+    if config.TWITTER_ON:
+        twt = Twython(secret.TWITTER_CONSUMER_KEY, secret.TWITTER_CONSUMER_SECRET, secret.TWITTER_OAUTH_TOKEN, secret.TWITTER_OAUTH_SECRET)
+
+    '''
+    Sensors thread
+    '''
+    sensor.start()
 
     # Wait while all sensor not ready !
     print('Waiting for sensors ready...', end='')
@@ -659,9 +635,6 @@ if __name__ == "__main__":
     '''
     cam = Camera()
     cam.setCallback(IR_ON, IR_OFF)
-
-    if config.TWITTER_ON:
-        twt = Twython(secret.TWITTER_CONSUMER_KEY, secret.TWITTER_CONSUMER_SECRET, secret.TWITTER_OAUTH_TOKEN, secret.TWITTER_OAUTH_SECRET)
 
     events = Events()
 
@@ -696,7 +669,7 @@ Only in fake mode :
 
     kb = KBHit()
 
-    print('Hit any key, or ESC to exit')
+    print('Hit q key to exit, ? for help !')
 
     inputs = {
         '0': [ True, events.door0_falling, events.door0_rising, SWITCH0 ],
@@ -752,7 +725,13 @@ Only in fake mode :
                 elif c == '3':
                     events.pir(PIR)
                 elif c.isdigit() and 3 < int(c) < 7:
-                    thresholds_test([9, 0.29, 2], alerts, int(c) - 4)
+                    name, value, validrange = (
+                        ( 'vbatt',      9,      config.VOLTAGE_ALERT ),
+                        ( 'current',    0.29,   config.CURRENT_ALERT ),
+                        ( 'temp',       2,      config.TEMP_ALERT )
+                    )[int(c) - 4]
+
+                    alerts(name, value, validrange)
 
         # Collecteur oeuf ouvert ?
         if GPIO.input(SWITCH0):

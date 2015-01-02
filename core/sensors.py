@@ -14,7 +14,7 @@ class Sensors(threading.Thread):
     TYPE_CURRENT     = 'current'
 
     # Refresh period in second
-    PERIOD = 10#60 * 5
+    period = 60 * 5
 
     sensors = {}
 
@@ -24,14 +24,17 @@ class Sensors(threading.Thread):
     results = {}
 
     callbacks_ready = {}
+    callbacks_threshold = {}
     callbacks_notinrange = {}
 
     default_validrange = None
     default_type = None
 
-    def __init__(self):
+    def __init__(self, period=60 * 5):
         threading.Thread.__init__(self)
         self._stopevent = threading.Event()
+
+        self.period = period
 
     def stop(self):
         self._stopevent.set()
@@ -72,13 +75,36 @@ class Sensors(threading.Thread):
         '''
         Callback called when data on channel read !
         '''
-        self.callbacks_ready[name] = callback
+        try:
+            self.callbacks_ready[name]
+        except KeyError:
+            self.callbacks_ready[name] = []
+
+        self.callbacks_ready[name].append(callback)
+
+    def setThresholdCallback(self, threshold, callback, name=None):
+        '''
+        Callback called when data on channel read !
+        Not in threshold value are saved !
+        '''
+        try:
+            self.callbacks_threshold[name]
+        except KeyError:
+            self.callbacks_threshold[name] = []
+
+        self.callbacks_threshold[name].append((threshold, callback))
 
     def setNotInRangeCallback(self, callback, name=None):
         '''
         Callback called when data not in range !
+        Not in range value are NOT saved !
         '''
-        self.callbacks_notinrange[name] = callback
+        try:
+            self.callbacks_notinrange[name]
+        except KeyError:
+            self.callbacks_notinrange[name] = []
+
+        self.callbacks_notinrange[name].append(callback)
 
     def isSensorsReady(self, sensors=[]):
         '''
@@ -91,7 +117,7 @@ class Sensors(threading.Thread):
                 break
 
             _, data = self.results[sensor]
-            if not data:
+            if data is None:
                 ready = False
                 break
         return ready
@@ -124,21 +150,32 @@ class Sensors(threading.Thread):
                     if not (_min < result < _max):
                         for key in (None, name):
                             if key in self.callbacks_notinrange:
-                                self.callbacks_notinrange[key](key, result, validrange)
+                                for callback in self.callbacks_notinrange[key]:
+                                    callback(name, result, validrange)
                         continue
+
+                # Test threshold
+                if name in self.callbacks_threshold:
+                    for data in self.callbacks_threshold[name]:
+                        threshold, callback = data
+                        _min, _max = threshold
+                        if not (_min < result < _max):
+                            callback(name, result, threshold)
 
                 # Call callback
                 for key in (None, name):
                     if key in self.callbacks_ready:
-                        self.callbacks_ready[key](name, result)
+                        for callback in self.callbacks_ready[key]:
+                            callback(name, result)
 
                 # All good ? Save value !
                 self.results[name] = (result, time.time())
 
-            time.sleep(self.PERIOD)
+            time.sleep(self.period)
 
     @contextmanager
     def attributes(self, validrange=None, type=None):
+        # Save context
         if validrange:
             old_validrange, self.default_validrange = self.default_validrange, validrange
         if type:
@@ -146,8 +183,76 @@ class Sensors(threading.Thread):
         try:
             yield
         finally:
+            # Restore context
             if validrange:
                 self.default_validrange, validrange = old_validrange, self.default_validrange
             if type:
                 self.default_type, type = old_type, self.default_type
+
+    '''
+    Decorators
+    '''
+
+    def __detect_increase_or_decrease(self, compare, name, unit_per_minut=None, measure_count=5):
+        '''
+        unit_per_minut: How many unit grow value per minut
+        measure_count: Count of successfully grow measures
+        '''
+        def decorator(func):
+            def wrapper(name, value, values=[None] * measure_count):
+                from core.functions import FifoBuffer
+                '''
+                Detect increase of value
+                '''
+                fifo = FifoBuffer(data=values)
+                fifo.append(value)
+
+                coeff = unit_per_minut / self.period
+
+                # Detect if increase
+                if fifo.isFull():
+                    last = 0
+                    increase = False
+                    for i in range(len(values)):
+                        if last:
+                            increase = getattr(values[i], compare)(last)
+
+                            if not increase:
+                                break
+
+                            if unit_per_minut and unit_per_minut > abs((values[i] - last) * coeff):
+                                increase = False
+                                break
+                        last = values[i]
+
+                    if increase:
+                        return func(name, value)
+
+            self.setReadyCallback(wrapper, name)
+            return wrapper
+        return decorator
+
+    def detect_increase(self, name, unit_per_minut=None, measure_count=5):
+        return self.__detect_increase_or_decrease('__gt__', name, unit_per_minut, measure_count)
+
+    def detect_decrease(self, name, unit_per_minut=None, measure_count=5):
+        return self.__detect_increase_or_decrease('__lt__', name, unit_per_minut, measure_count)
+
+    def set_not_in_range(self, name=None):
+        def wrapper(func):
+            self.setNotInRangeCallback(func, name=None)
+            return func
+        return wrapper
+
+    def set_ready(self, name=None):
+        def wrapper(func):
+            self.setReadyCallback(func, name=None)
+            return func
+        return wrapper
+
+    def set_threshold_callback(self, threshold, name):
+        def wrapper(func):
+            self.setThresholdCallback(threshold, func, name)
+            return func
+        return wrapper
 
