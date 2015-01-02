@@ -75,9 +75,7 @@ class Sensors(threading.Thread):
         '''
         Callback called when data on channel read !
         '''
-        try:
-            self.callbacks_ready[name]
-        except KeyError:
+        if name not in self.callbacks_ready:
             self.callbacks_ready[name] = []
 
         self.callbacks_ready[name].append(callback)
@@ -87,9 +85,7 @@ class Sensors(threading.Thread):
         Callback called when data on channel read !
         Not in threshold value are saved !
         '''
-        try:
-            self.callbacks_threshold[name]
-        except KeyError:
+        if name not in self.callbacks_threshold:
             self.callbacks_threshold[name] = []
 
         self.callbacks_threshold[name].append((threshold, callback))
@@ -99,9 +95,7 @@ class Sensors(threading.Thread):
         Callback called when data not in range !
         Not in range value are NOT saved !
         '''
-        try:
-            self.callbacks_notinrange[name]
-        except KeyError:
+        if name not in self.callbacks_notinrange:
             self.callbacks_notinrange[name] = []
 
         self.callbacks_notinrange[name].append(callback)
@@ -146,21 +140,21 @@ class Sensors(threading.Thread):
 
                 # Save only if in valid range !
                 if validrange:
-                    _min, _max = validrange
+                    _min, _max = validrange(name) if callable(validrange) else validrange
                     if not (_min < result < _max):
                         for key in (None, name):
                             if key in self.callbacks_notinrange:
                                 for callback in self.callbacks_notinrange[key]:
-                                    callback(name, result, validrange)
+                                    callback(name, result, (_min, _max))
                         continue
 
                 # Test threshold
                 if name in self.callbacks_threshold:
                     for data in self.callbacks_threshold[name]:
                         threshold, callback = data
-                        _min, _max = threshold
+                        _min, _max = threshold(name) if callable(threshold) else threshold
                         if not (_min < result < _max):
-                            callback(name, result, threshold)
+                            callback(name, result, (_min, _max))
 
                 # Call callback
                 for key in (None, name):
@@ -193,11 +187,12 @@ class Sensors(threading.Thread):
     Decorators
     '''
 
-    def __detect_increase_or_decrease(self, compare, name, unit_per_minut=None, measure_count=5):
+    def detect_change(self, name, unit_per_minut=0.01, measure_count=5):
         '''
-        unit_per_minut: How many unit grow value per minut
+        unit_per_minut: How many unit value grow (or decrease if negative) per minut
         measure_count: Count of successfully grow measures
         '''
+        compare = '__gt__' if unit_per_minut > 0 else '__lt__'
         def decorator(func):
             def wrapper(name, value, values=[None] * measure_count):
                 from core.functions import FifoBuffer
@@ -231,12 +226,6 @@ class Sensors(threading.Thread):
             self.setReadyCallback(wrapper, name)
             return wrapper
         return decorator
-
-    def detect_increase(self, name, unit_per_minut=None, measure_count=5):
-        return self.__detect_increase_or_decrease('__gt__', name, unit_per_minut, measure_count)
-
-    def detect_decrease(self, name, unit_per_minut=None, measure_count=5):
-        return self.__detect_increase_or_decrease('__lt__', name, unit_per_minut, measure_count)
 
     def set_not_in_range(self, name=None):
         def wrapper(func):

@@ -1,3 +1,4 @@
+# -*- coding: utf8 -*-
 
 import random
 import glob
@@ -144,6 +145,34 @@ def onewire_read_temperature(sensors, fahrenheit=False, maxretry=3, basedir='/sy
     else:
         return out
     #return None if type(sensors) == str else out if not len(out) or type(sensors) == list else out[0]
+
+def only_one_call_each(seconds=None, minuts=None, hours=None, days=None, withposarg=None):
+    '''
+    Decorator function : limit function call
+    Todo:
+    - Handle keyword arg (withkeyarg)
+    - Handle multiple args
+    '''
+
+    _seconds = 0
+    for var, delay in ( ('seconds', 1), ('minuts', 60), ('hours', 60 * 60), ('days', 60 * 60 * 24) ):
+        if locals()[var] is not None:
+            _seconds += locals()[var] * delay
+
+    def decorator(func):
+        last = {}
+        def wrapper(*args, **kwargs):
+            #nonlocal last
+            arg = args[withposarg] if withposarg is not None else None
+            if arg in last and last[arg] and last[arg] + _seconds > time.time():
+                #print('skip')
+                return
+
+            func(*args, **kwargs)
+            last[arg] = time.time()
+        return wrapper
+
+    return decorator
 
 if __name__ == '__main__':
     result = onewire_read_temperature([0, 1, 2], basedir='/tmp/')

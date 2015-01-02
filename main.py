@@ -11,6 +11,7 @@
 from __future__ import print_function
 import sys
 import time
+import arrow
 import logging
 import curses
 from fractions import Fraction
@@ -27,7 +28,7 @@ from lib.RainbowHandler import RainbowLoggingHandler
 from lib.freesms import send_sms
 
 from core.db import TwitterActivityTable, EventsTable, SensorsTable, sqla, db
-from core.functions import FifoBuffer
+from core.functions import FifoBuffer, only_one_call_each
 from core.sensors import Sensors
 from core.speak import speak
 from core import dialog
@@ -102,7 +103,8 @@ IR_OFF()
 
 class PirActivity():
 
-    interval = 5.0
+    # Interval in second
+    interval = 30.0
 
     activities = []
     startat = False
@@ -111,6 +113,7 @@ class PirActivity():
         self.startat = time.time()
 
     def add(self):
+        print('pir!')
         self.clean()
         self.activities.append(time.time()) 
 
@@ -149,52 +152,76 @@ pira = PirActivity()
 
 sensor = Sensors(1 if config.FAKE_MODE else 10)
 
-@sensor.detect_increase(name='1w_1', unit_per_minut=60, measure_count=10)
-def detect_increase(name, value):
-    print('Increase detected !')
+def get_maxima(name):
+    c = SensorsTable.c
+    query = sqla.select([c.name, sqla.sql.func.min(sqla.cast(c.value, sqla.Float)), \
+        sqla.sql.func.max(sqla.cast(c.value, sqla.Float)), c.type ]).group_by(c.type, c.name). \
+        where(c.name==name)
+    name, _min, _max, type = db.execute(query).fetchone()
+    return (_min, _max)
 
-@sensor.detect_decrease(name='1w_1', unit_per_minut=60, measure_count=10)
-def detect_decrease(name, value):
-    print('Decrease detected !')
+class Maxmin:
+
+    sensor_name = '1w_0'
+
+    minima_detected = None
+    maxima_detected = None
+
+    @staticmethod
+    @sensor.detect_change(name=sensor_name)
+    def detect_increase(name, value):
+        if Maxmin.minima_detected is not None:
+            _min, _ = get_maxima(name)
+            twit(dialog.record_out_temp_min % (_min, Maxmin.minima_detected.humanize(locale='fr')))
+            Maxmin.minima_detected = None
+
+    @staticmethod
+    @sensor.detect_change(name=sensor_name, unit_per_minut=-0.01)
+    def detect_decrease(name, value):
+        if Maxmin.maxima_detected is not None:
+            _, _max = get_maxima(name)
+            twit(dialog.record_out_temp_max % (_max, Maxmin.maxima_detected.humanize(locale='fr')))
+            Maxmin.maxima_detected = None
+
+    @staticmethod
+    @sensor.set_threshold_callback(get_maxima, sensor_name)
+    def detect_maxima(name, value, threshold):
+        _min, _max = threshold
+        if value < _min:
+            Maxmin.minima_detected = arrow.utcnow()
+        elif value > _max:
+            Maxmin.maxima_detected = arrow.utcnow()
 
 @sensor.set_ready()
+@only_one_call_each(seconds=config.SAVE_TO_DB_EVERY, withposarg=0)
 def save_to_db(name, value, last_save={}):
-
-    try:
-        last_save[name]
-    except KeyError:
-        last_save[name] = 0
-
-    # Save in db every 5 min
-    if not last_save[name] or time.time() - last_save[name] > config.SAVE_TO_DB_EVERY:
-        _, _, _, type = sensor.sensors[name]
-        db.execute(SensorsTable.insert().values(
-            type=type,
-            name=name,
-            value=value,
-            date=datetime.now(),
-        ))
-
-        last_save[name] = time.time()
+    _, _, _, type = sensor.sensors[name]
+    db.execute(SensorsTable.insert().values(
+        type=type,
+        name=name,
+        value=value,
+        date=datetime.now(),
+    ))
 
 @sensor.set_not_in_range()
 def notinrange(name, value, validrange):
     logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, value, validrange))
 
+@sensor.detect_change(name='1w_1', unit_per_minut=0.1, measure_count=5)
+@sensor.detect_change(name='1w_2', unit_per_minut=0.1, measure_count=5)
+def detect_increase(name, value):
+    print('Increase detected !', name)
+
+@sensor.detect_change(name='1w_1', unit_per_minut=-0.1, measure_count=5)
+@sensor.detect_change(name='1w_2', unit_per_minut=-0.1, measure_count=5)
+def detect_decrease(name, value):
+    print('Decrease detected !', name)
+
 @sensor.set_threshold_callback(config.TEMP_ALERT,    'temp')
 @sensor.set_threshold_callback(config.VOLTAGE_ALERT, 'vbatt')
 @sensor.set_threshold_callback(config.CURRENT_ALERT, 'current')
-def alerts(name, value, validrange, last={}):
-
-    # Save alert time !
-    if name not in last:
-        last[name] = time.time()
-    else:
-        # Only one alert each 24h
-        if last[name] + 60 * 60 * 24 > time.time():
-            return
-
-        last[name] = time.time()
+@only_one_call_each(hours=12, withposarg=0)
+def alerts(name, value, validrange):
 
     messages = {
         'vbatt':    'Vbatt voltage (%0.2fV) not in range (thresholds: %s) !',
@@ -223,16 +250,13 @@ with sensor.attributes(type='switch'):
 
 with sensor.attributes(validrange=(-20, 50), type=sensor.TYPE_TEMPERATURE):
     sensor.declare('temp',   lambda: raspi.readAdc(2) * 100) # Enceinte
-    #sensor.declare('1w_0',   onewire_read_temperature, (config.ONEWIRE_SENSOR0,)) # Extérieur
+    sensor.declare('1w_0',   onewire_read_temperature, (config.ONEWIRE_SENSOR0,)) # Extérieur
     sensor.declare('1w_1',   onewire_read_temperature, (config.ONEWIRE_SENSOR1,)) # Nid 1
-    #sensor.declare('1w_2',   onewire_read_temperature, (config.ONEWIRE_SENSOR2,)) # Nid 2
+    sensor.declare('1w_2',   onewire_read_temperature, (config.ONEWIRE_SENSOR2,)) # Nid 2
 
 sensor.declare('pir',   pira.get, type='activity')
 
 #sensor.setNotInRangeCallback(lambda name, value, validrange: logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, value, validrange)))
-#sensor.setThresholdCallback(config.TEMP_ALERT,      alerts, 'temp')
-#sensor.setThresholdCallback(config.VOLTAGE_ALERT,   alerts, 'vbatt')
-#sensor.setThresholdCallback(config.CURRENT_ALERT,   alerts, 'current')
 #sensor.setReadyCallback(save_to_db)
 
 #sensor.setReadyCallback(detect_increase, '1w_1')
@@ -578,8 +602,6 @@ def get_sensor_data():
     return (vbatt, lux, temp, current, temp1, temp2, temp3)
 
 def twit_report(vbatt, lux, temp, current, temp1, temp2, temp3, takephoto=True):
-    #twit(dialog.report_light % (temp, lux, vbatt, current), takephoto=takephoto)
-
     twit(dialog.report % (get_string_from_temperatures(temp, temp1, temp2, temp3), get_string_from_lux(lux), vbatt, current), takephoto=takephoto)
 
 class Report(threading.Thread):
@@ -692,6 +714,7 @@ Only in fake mode :
                     rthread.stop()
                 if 'tthread' in globals():
                     tthread.stop()
+                sensor.stop()
                 break
             elif c == 'c':
                 print('Reload config !')

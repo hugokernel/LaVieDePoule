@@ -4,9 +4,14 @@ lux_map = ('nuit', 'beau temps', 'super beau temps')
 
 sensors_map = ('enceinte', 'extérieur', 'nid 1', 'nid 2')
 
-#report = 'Temperatures -> enceinte: %0.2f°C, nid 1: %0.2f°C, nid 2: %0.2f°C, ext: %0.2f°C, tension: %0.2fV, courant: %0.2fA'
-report = 'Temperatures -> %s, luminosité: %s, tension: %0.1fV, courant: %0.1fA'
-report_light = 'Temperature enceinte: %0.1f°C, luminosité: %0.1f, tension: %0.1fV, courant: %0.1fA'
+report = '%s, lumière: %s, (alim %0.1fV@%0.1fA)'
+
+record_out_temp_min = "Record de température extérieure basse atteint avec %0.1f°C %s !"
+record_out_temp_max = "Record de température extérieure haute atteint avec %0.1f°C %s !"
+
+stats_yesterday = "Stats d'hier (%s) #statsjour"
+stats_lastweek = "Stats de la semaine passée (semaine %s) #statssemaine"
+stats_lastmonth = "Stats du mois passée (%s) #statsmois"
 
 cot = (
     '@%username% {0}',

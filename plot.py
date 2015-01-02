@@ -6,6 +6,8 @@ import calendar
 
 from collections import OrderedDict
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -29,7 +31,8 @@ def get_data_from_range(days=None):
 
     def get_day(day):
         if type(day) is int:
-            return datetime.datetime.utcnow() + datetime.timedelta(days=day)
+            return (datetime.datetime.now() + datetime.timedelta(days=day)) \
+                .replace(hour=0, minute=0, second=0, microsecond=0)
         elif type(day) is str:
             for item in ('%Y-%m-%d', '%Y-%m-%d %H:%M:%S'):
                 try:
@@ -134,22 +137,23 @@ def generate_plot(data, time, informations, xlabel, ylabel, dateformat='%H:%M'):
 
     plt.grid(True)
     plt.savefig(EXPORT_FILE, bbox_extra_artists=(lgd,))#, bbox_inches='tight')#, dpi=1)#, dpi=10)
+    return True
 
 if __name__ == '__main__':
 
     info = OrderedDict()
-    info['1w_0'] = ('Extérieur',  'violet')
+    info['1w_0'] = (u'Extérieur',  'violet')
     info['temp'] = ('Enceinte',   'red')
     info['1w_1'] = ('Nid 1',      'green')
     info['1w_2'] = ('Nid 2',      'blue')
     #info['lux']  = ('Luminosité', 'orange') #( 'orange', True ))
-    info['lux']  = ('Luminosité', ( 'orange', True ))
+    info['lux']  = (u'Luminosité', ( 'orange', True ))
 
     info['pir'] = ('PIR',         'black')
 
     def generate_plot_from_range(days, dateformat='%H:%M'):
         data, time = get_data_from_range(days)
-        generate_plot(data, time, info, 'Temps', 'Températures', dateformat=dateformat)
+        return generate_plot(data, time, info, u'Temps', u'Températures', dateformat=dateformat)
 
     def usage():
         print('''Usage :
@@ -159,19 +163,21 @@ if __name__ == '__main__':
 - {name} lastmonth  Generate plot with last month data
 - {name} range x y  Generate plot from range x to y (where x and y are in datetime format)
         '''.format(name=sys.argv[0]))
+        sys.exit()
 
     try:
+        status = False
         if len(sys.argv) <= 1 or sys.argv[1] == 'help':
             usage()
         elif sys.argv[1] == 'today':
-            generate_plot_from_range((0, 0), dateformat='%H:%M')
+            status = generate_plot_from_range((0, 0), dateformat='%H:%M')
         elif sys.argv[1] == 'yesterday':
-            generate_plot_from_range((-1, -1), dateformat='%H:%M')
+            status = generate_plot_from_range((-1, -1), dateformat='%H:%M')
         elif sys.argv[1] == 'lastweek':
-            generate_plot_from_range((-7, -1), dateformat='%d %b %H:%M')
+            status = generate_plot_from_range((-7, -1), dateformat='%d %b %H:%M')
         elif sys.argv[1] == 'lastmonth':
 
-            lastmonth = datetime.datetime.utcnow().replace(day=1) - datetime.timedelta(days=1)
+            lastmonth = datetime.datetime.now().replace(day=1) - datetime.timedelta(days=1)
             start = lastmonth.replace(day=1)
 
             #year, month = [ int(data) for data in lastmonth.strftime('%Y,%m').split(',') ]
@@ -180,16 +186,32 @@ if __name__ == '__main__':
 
             end = start + datetime.timedelta(days=daycount - 1)
 
-            generate_plot_from_range((start, end), dateformat='%d %b %H:%M')
+            status = generate_plot_from_range((start, end), dateformat='%d %b %H:%M')
         elif sys.argv[1] == 'range':
-            generate_plot_from_range((sys.argv[2], sys.argv[3]), dateformat='%d %b %H:%M')
+            status = generate_plot_from_range((sys.argv[2], sys.argv[3]), dateformat='%d %b %H:%M')
         else:
             usage()
 
-        if sys.argv[len(sys.argv) - 1] == 'tweet':
-            from config import secret
-            twt = Twython(secret.TWITTER_CONSUMER_KEY, secret.TWITTER_CONSUMER_SECRET, secret.TWITTER_OAUTH_TOKEN, secret.TWITTER_OAUTH_SECRET)
-            twt.update_status_with_media(status='Météo de la journée passée', media=open(EXPORT_FILE, 'r'))
+        if sys.argv[len(sys.argv) - 1] == 'tweet' and status:
+            from config import secret, general as config
+            from core import dialog
+            from twython import Twython
+
+            yesterday = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+            week = (datetime.datetime.now() - datetime.timedelta(weeks=1)).strftime('%W, %Y')
+            month = (datetime.datetime.now() - datetime.timedelta(weeks=1)).strftime('%Y-%m')
+
+            message = {
+                'yesterday':    dialog.stats_yesterday % yesterday,
+                'lastweek':     dialog.stats_lastweek % week,
+                'lastmonth':    dialog.stats_lastmonth % month
+            }[sys.argv[1]]
+
+            if config.FAKE_MODE or not config.TWITTER_ON:
+                print(message)
+            else:
+                twt = Twython(secret.TWITTER_CONSUMER_KEY, secret.TWITTER_CONSUMER_SECRET, secret.TWITTER_OAUTH_TOKEN, secret.TWITTER_OAUTH_SECRET)
+                twt.update_status_with_media(status=message, media=open(EXPORT_FILE, 'r'))
 
     except Exception as e:
         print('Error while generating data (%s) !' % e)

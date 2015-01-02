@@ -33,7 +33,7 @@ Validity of sensor data
 MAX_AGE = 5 * 60
 
 '''
-Save to db every x minuts
+Save to db every x seconds
 '''
 SAVE_TO_DB_EVERY = 5 * 60
 

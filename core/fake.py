@@ -101,9 +101,17 @@ class adc:
             return out
 
 _value = 10.2
+_direction = True
 def onewire_read_temperature(sensors, fahrenheit=False, maxretry=3, basedir=None):
-    global _value
-    _value += 1
+    global _value, _direction
+
+    if _direction:
+        _value += 1
+    else:
+        _value -= 1
+
+    if _value > 18 or _value < -5:
+        _direction = not _direction
 
     out = []
     if type(sensors) == str:
