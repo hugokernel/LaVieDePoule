@@ -28,7 +28,7 @@ from lib.RainbowHandler import RainbowLoggingHandler
 from lib.freesms import send_sms
 
 from core.db import TwitterActivityTable, EventsTable, SensorsTable, sqla, db
-from core.functions import FifoBuffer, only_one_call_each
+from core.functions import FifoBuffer, only_one_call_each, get_time
 from core.sensors import Sensors
 from core.speak import speak
 from core import dialog
@@ -113,7 +113,6 @@ class PirActivity():
         self.startat = time.time()
 
     def add(self):
-        print('pir!')
         self.clean()
         self.activities.append(time.time()) 
 
@@ -207,13 +206,17 @@ def save_to_db(name, value, last_save={}):
 def notinrange(name, value, validrange):
     logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, value, validrange))
 
-@sensor.detect_change(name='1w_1', unit_per_minut=0.1, measure_count=5)
-@sensor.detect_change(name='1w_2', unit_per_minut=0.1, measure_count=5)
+#UNIT_PER_MINUT=0.01
+UNIT_PER_MINUT=0.2
+MEASURE_COUNT=3
+MIN_PERIOD=60
+@sensor.detect_change(name='1w_1', unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
+@sensor.detect_change(name='1w_2', unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
 def detect_increase(name, value):
     print('Increase detected !', name)
 
-@sensor.detect_change(name='1w_1', unit_per_minut=-0.1, measure_count=5)
-@sensor.detect_change(name='1w_2', unit_per_minut=-0.1, measure_count=5)
+@sensor.detect_change(name='1w_1', unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
+@sensor.detect_change(name='1w_2', unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
 def detect_decrease(name, value):
     print('Decrease detected !', name)
 
@@ -304,7 +307,45 @@ while True:
     i += 1
 """
 
+mention = '@LaVieDePoule !photo +toall' # Take a photo and to all (only if user is admin)
+mention = '@LaVieDePoule !sensor [+toall]'     # Get sensors values
+
+mention = ' '.join(sys.argv[1:])
+print(mention)
+if mention[1:len(config.TWITTER_ACCOUNT) + 1] == config.TWITTER_ACCOUNT:
+    tokens = mention[len(config.TWITTER_ACCOUNT) + 1:].strip().split()
+    possible_args = ()
+
+    commands = {
+        '!photo': (),
+        '!sensor': sensor.sensors.keys()
+    }
+
+    # First token must be a command !
+    cmd_found = False
+    for command, args in commands.items():
+        if tokens[0] == command:
+            possible_args = args
+            break
+
+    if cmd_found:
+        print(tokens, possible_args)
+        valid_args = []
+        for token in tokens[1:]:
+            if token in possible_args:
+                valid_args.append(token)
+            if token == '+toall' and config.TWITTER_ACCOUNT == config.TWITTER_ACCOUNT:
+                valid_args.append('+toall')
+
+
+        print('valid args:', valid_args)
+
+sys.exit()
+
+
 class Twitter(threading.Thread):
+
+    PERIOD = 60 * 4
 
     sources = []
     twitter = None
@@ -369,7 +410,7 @@ class Twitter(threading.Thread):
                     except (TwythonError, TwythonRateLimitError) as e:
                         logger.error(e)
 
-            time.sleep(60 * 2)
+            time.sleep(self.PERIOD)
 
 '''
 # Get your "home" timeline

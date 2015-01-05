@@ -76,7 +76,7 @@ def get_data_from_range(days=None):
 
     return data, time
 
-def generate_plot(data, time, informations, xlabel, ylabel, dateformat='%H:%M'):
+def generate_plot(data, time, informations, xlabel, ylabel, dateformat='%H:%M', exportfile=EXPORT_FILE):
 
     params = []
     patches = []
@@ -136,7 +136,8 @@ def generate_plot(data, time, informations, xlabel, ylabel, dateformat='%H:%M'):
     '''
 
     plt.grid(True)
-    plt.savefig(EXPORT_FILE, bbox_extra_artists=(lgd,))#, bbox_inches='tight')#, dpi=1)#, dpi=10)
+    plt.savefig(exportfile, bbox_extra_artists=(lgd,))#, bbox_inches='tight')#, dpi=1)#, dpi=10)
+
     return True
 
 if __name__ == '__main__':
@@ -151,9 +152,9 @@ if __name__ == '__main__':
 
     info['pir'] = ('PIR',         'black')
 
-    def generate_plot_from_range(days, dateformat='%H:%M'):
+    def generate_plot_from_range(days, dateformat='%H:%M', exportfile=EXPORT_FILE):
         data, time = get_data_from_range(days)
-        return generate_plot(data, time, info, u'Temps', u'Températures', dateformat=dateformat)
+        return generate_plot(data, time, info, u'Temps', u'Températures', dateformat=dateformat, exportfile=exportfile)
 
     def usage():
         print('''Usage :

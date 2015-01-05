@@ -8,6 +8,7 @@ LOW_LIGHT = False
 
 TAKE_PHOTO = False
 
+TWITTER_ACCOUNT = 'LaVieDePoule'
 TWITTER_ADMIN_ACCOUNT = 'hugokernel'
 
 '''

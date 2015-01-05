@@ -165,7 +165,6 @@ def only_one_call_each(seconds=None, minuts=None, hours=None, days=None, withpos
             #nonlocal last
             arg = args[withposarg] if withposarg is not None else None
             if arg in last and last[arg] and last[arg] + _seconds > time.time():
-                #print('skip')
                 return
 
             func(*args, **kwargs)

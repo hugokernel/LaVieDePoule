@@ -156,7 +156,7 @@ class Sensors(threading.Thread):
                         if not (_min < result < _max):
                             callback(name, result, (_min, _max))
 
-                # Call callback
+                # Call ready callbacks
                 for key in (None, name):
                     if key in self.callbacks_ready:
                         for callback in self.callbacks_ready[key]:
@@ -187,40 +187,49 @@ class Sensors(threading.Thread):
     Decorators
     '''
 
-    def detect_change(self, name, unit_per_minut=0.01, measure_count=5):
+    def detect_change(self, name, unit_per_minut=0.01, measure_count=5, min_period=0):
         '''
         unit_per_minut: How many unit value grow (or decrease if negative) per minut
         measure_count: Count of successfully grow measures
+        min_period: Minimum period
         '''
         compare = '__gt__' if unit_per_minut > 0 else '__lt__'
         def decorator(func):
-            def wrapper(name, value, values=[None] * measure_count):
+            def wrapper(name, value, values=[None] * measure_count, last_time=type('X', (object,), { 'value': None })):
+
+                if min_period and last_time.value and last_time.value + min_period > time.time():
+                    return
+
+                last_time.value = time.time()
+
                 from core.functions import FifoBuffer
                 '''
-                Detect increase of value
+                Detect change of value
                 '''
                 fifo = FifoBuffer(data=values)
                 fifo.append(value)
 
+                #print(name, fifo.data)
+
                 coeff = unit_per_minut / self.period
 
-                # Detect if increase
+                # Detect if change
                 if fifo.isFull():
                     last = 0
-                    increase = False
+                    change = False
                     for i in range(len(values)):
                         if last:
-                            increase = getattr(values[i], compare)(last)
+                            change = getattr(values[i], compare)(last)
 
-                            if not increase:
+                            if not change:
                                 break
 
                             if unit_per_minut and unit_per_minut > abs((values[i] - last) * coeff):
-                                increase = False
+                                change = False
                                 break
                         last = values[i]
 
-                    if increase:
+                    if change:
                         return func(name, value)
 
             self.setReadyCallback(wrapper, name)
