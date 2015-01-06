@@ -187,7 +187,7 @@ class Sensors(threading.Thread):
     Decorators
     '''
 
-    def detect_change(self, name, unit_per_minut=0.01, measure_count=5, min_period=0):
+    def changedetect(self, name, unit_per_minut=0.01, measure_count=5, min_period=0):
         '''
         unit_per_minut: How many unit value grow (or decrease if negative) per minut
         measure_count: Count of successfully grow measures
@@ -236,19 +236,19 @@ class Sensors(threading.Thread):
             return wrapper
         return decorator
 
-    def set_not_in_range(self, name=None):
+    def notinrange(self, name=None):
         def wrapper(func):
             self.setNotInRangeCallback(func, name=None)
             return func
         return wrapper
 
-    def set_ready(self, name=None):
+    def ready(self, name=None):
         def wrapper(func):
             self.setReadyCallback(func, name=None)
             return func
         return wrapper
 
-    def set_threshold_callback(self, threshold, name):
+    def threshold(self, threshold, name):
         def wrapper(func):
             self.setThresholdCallback(threshold, func, name)
             return func
