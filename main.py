@@ -167,7 +167,7 @@ class Maxmin:
     maxima_detected = None
 
     @staticmethod
-    @sensor.detect_change(name=sensor_name)
+    @sensor.changedetect(name=sensor_name)
     def detect_increase(name, value):
         if Maxmin.minima_detected is not None:
             _min, _ = get_maxima(name)
@@ -175,7 +175,7 @@ class Maxmin:
             Maxmin.minima_detected = None
 
     @staticmethod
-    @sensor.detect_change(name=sensor_name, unit_per_minut=-0.01)
+    @sensor.changedetect(name=sensor_name, unit_per_minut=-0.01)
     def detect_decrease(name, value):
         if Maxmin.maxima_detected is not None:
             _, _max = get_maxima(name)
@@ -183,7 +183,7 @@ class Maxmin:
             Maxmin.maxima_detected = None
 
     @staticmethod
-    @sensor.set_threshold_callback(get_maxima, sensor_name)
+    @sensor.threshold(get_maxima, sensor_name)
     def detect_maxima(name, value, threshold):
         _min, _max = threshold
         if value < _min:
@@ -191,7 +191,7 @@ class Maxmin:
         elif value > _max:
             Maxmin.maxima_detected = arrow.utcnow()
 
-@sensor.set_ready()
+@sensor.ready()
 @only_one_call_each(seconds=config.SAVE_TO_DB_EVERY, withposarg=0)
 def save_to_db(name, value, last_save={}):
     _, _, _, type = sensor.sensors[name]
@@ -202,7 +202,7 @@ def save_to_db(name, value, last_save={}):
         date=datetime.now(),
     ))
 
-@sensor.set_not_in_range()
+@sensor.notinrange()
 def notinrange(name, value, validrange):
     logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, value, validrange))
 
@@ -210,19 +210,19 @@ def notinrange(name, value, validrange):
 UNIT_PER_MINUT=0.2
 MEASURE_COUNT=3
 MIN_PERIOD=60
-@sensor.detect_change(name='1w_1', unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
-@sensor.detect_change(name='1w_2', unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
+@sensor.changedetect(name='1w_1', unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
+@sensor.changedetect(name='1w_2', unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
 def detect_increase(name, value):
     print('Increase detected !', name)
 
-@sensor.detect_change(name='1w_1', unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
-@sensor.detect_change(name='1w_2', unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
+@sensor.changedetect(name='1w_1', unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
+@sensor.changedetect(name='1w_2', unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
 def detect_decrease(name, value):
     print('Decrease detected !', name)
 
-@sensor.set_threshold_callback(config.TEMP_ALERT,    'temp')
-@sensor.set_threshold_callback(config.VOLTAGE_ALERT, 'vbatt')
-@sensor.set_threshold_callback(config.CURRENT_ALERT, 'current')
+@sensor.threshold(config.TEMP_ALERT,    'temp')
+@sensor.threshold(config.VOLTAGE_ALERT, 'vbatt')
+@sensor.threshold(config.CURRENT_ALERT, 'current')
 @only_one_call_each(hours=12, withposarg=0)
 def alerts(name, value, validrange):
 
@@ -307,40 +307,140 @@ while True:
     i += 1
 """
 
+
+
+
+
+'''
+from __future__ import print_function
+import sys
+
+class config:
+    TWITTER_ACCOUNT = 'LaVieDePoule'
+    TWITTER_ACCOUNT_ADMIN = 'hugokernel'
+
+class sensor:
+    class sensors:
+        @staticmethod
+        def keys():
+            return ('1w_0', '1w_2')
+
 mention = '@LaVieDePoule !photo +toall' # Take a photo and to all (only if user is admin)
 mention = '@LaVieDePoule !sensor [+toall]'     # Get sensors values
+'''
 
 mention = ' '.join(sys.argv[1:])
+
+source = 'hugokernel'
+
+import re
+
+'''
+Syntax:
+@LaVieDePoule !photo
+@LaVieDePoule !photo(iroff)
+@LaVieDePoule !photo(exposition=20 iroff)
+'''
+
+#a = re.search(r'\!([a-z_]+)\s(.*?)', mention)
+
+m = re.search(r'@([A-Za-z0-9_]{1,15})+\s\!([a-z_]+)\s*(.*?)*$', mention)
+if m:
+    dest, cmd, cmdargs, args = m.group(1), m.group(2), [], m.group(3).split()
+
+m = re.search(r'@([A-Za-z0-9_]{1,15})+\s\!([a-z_]+)\((.*?)\)\s(.*?)$', mention)
+if m:
+    dest, cmd, cmdargs, args = m.group(1), m.group(2), m.group(3).split(), m.group(4).split()
+
+def cmd_photo(*args):
+    return 'Photo Cool !', None
+
+def cmd_sensor(*args):
+    return 'Sensors values : ' + ','.join(args), None
+
+def cmd_help(*args):
+    return 'Help: ' + str([ command for command in commands ]), None
+
+def cmd_plot(*args):
+    print('Plot args:', args)
+    return 'plot message', None
+
+commands = {
+    'help':     cmd_help,
+    'photo':    cmd_photo,
+    'sensor':   cmd_sensor,
+    'plot':     cmd_plot,
+}
+
 print(mention)
+if cmd and cmd in commands:
+    message, media = commands[cmd](*cmdargs)
+
+    if not (source == config.TWITTER_ADMIN_ACCOUNT and 'toall' in args):
+        message = '@%s %s' % (source, message)
+
+    print('Message:', message)
+
+sys.exit()
+
+'''
 if mention[1:len(config.TWITTER_ACCOUNT) + 1] == config.TWITTER_ACCOUNT:
-    tokens = mention[len(config.TWITTER_ACCOUNT) + 1:].strip().split()
-    possible_args = ()
+
+    def cmd_photo(*args):
+        return 'Cool !', None
+
+    def cmd_sensor(*args):
+        return 'Sensors values : ' + ','.join(args), None
+
+    def cmd_help(*args):
+        help_cmd = []
+        for command, data in commands.items():
+            help_cmd.append(command + (' [' + ('|'.join([ arg for arg in data[0] ])) + ']' if data[0] else ''))
+        return 'Help: ' + str(help_cmd), None
+
+    def cmd_plot(*args):
+        return '', None
 
     commands = {
-        '!photo': (),
-        '!sensor': sensor.sensors.keys()
+        # !command: ((arguments,), command_callback)
+        '!help':    (None, cmd_help),
+        '!photo':   (('iroff',), cmd_photo),
+        '!sensor':  (sensor.sensors.keys(), cmd_sensor),
+        '!plot':    (('range', 'today', 'yesterday'), cmd_plot)
     }
 
+    tokens = mention[len(config.TWITTER_ACCOUNT) + 1:].strip().split()
+
     # First token must be a command !
+    possible_args = ('+toall')
     cmd_found = False
     for command, args in commands.items():
         if tokens[0] == command:
-            possible_args = args
+            cmd_found = True
+            possible_args, callback = args
             break
 
     if cmd_found:
         print(tokens, possible_args)
         valid_args = []
         for token in tokens[1:]:
-            if token in possible_args:
+            if possible_args and token in possible_args:
                 valid_args.append(token)
-            if token == '+toall' and config.TWITTER_ACCOUNT == config.TWITTER_ACCOUNT:
+            if token == '+toall' and source == config.TWITTER_ACCOUNT_ADMIN:
                 valid_args.append('+toall')
-
 
         print('valid args:', valid_args)
 
-sys.exit()
+        text, media = callback(*valid_args)
+        if '+toall' not in valid_args:
+            text = '%s %s' % (source, text)
+        print(text)
+
+'''
+
+
+
+
 
 
 class Twitter(threading.Thread):
