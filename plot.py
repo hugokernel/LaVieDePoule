@@ -17,6 +17,14 @@ from core.db import SensorsTable, sqla, db
 
 EXPORT_FILE = '/tmp/plot.png'
 
+info = OrderedDict()
+info['1w_2'] = (u'Extérieur',  'violet')
+info['temp'] = ('Enceinte',   'red')
+info['1w_1'] = ('Nid 1',      'green')
+info['1w_0'] = ('Nid 2',      'blue')
+info['lux']  = (u'Luminosité', ( 'orange', True ))
+info['pir'] = ('PIR',         'black')
+
 def get_data_from_range(days=None):
     '''
     Get data from days
@@ -140,21 +148,11 @@ def generate_plot(data, time, informations, xlabel, ylabel, dateformat='%H:%M', 
 
     return True
 
+def generate_plot_from_range(days, dateformat='%H:%M', exportfile=EXPORT_FILE):
+    data, time = get_data_from_range(days)
+    return generate_plot(data, time, info, u'Temps', u'Températures', dateformat=dateformat, exportfile=exportfile)
+
 if __name__ == '__main__':
-
-    info = OrderedDict()
-    info['1w_0'] = (u'Extérieur',  'violet')
-    info['temp'] = ('Enceinte',   'red')
-    info['1w_1'] = ('Nid 1',      'green')
-    info['1w_2'] = ('Nid 2',      'blue')
-    #info['lux']  = ('Luminosité', 'orange') #( 'orange', True ))
-    info['lux']  = (u'Luminosité', ( 'orange', True ))
-
-    info['pir'] = ('PIR',         'black')
-
-    def generate_plot_from_range(days, dateformat='%H:%M', exportfile=EXPORT_FILE):
-        data, time = get_data_from_range(days)
-        return generate_plot(data, time, info, u'Temps', u'Températures', dateformat=dateformat, exportfile=exportfile)
 
     def usage():
         print('''Usage :

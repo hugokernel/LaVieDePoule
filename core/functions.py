@@ -146,9 +146,10 @@ def onewire_read_temperature(sensors, fahrenheit=False, maxretry=3, basedir='/sy
         return out
     #return None if type(sensors) == str else out if not len(out) or type(sensors) == list else out[0]
 
-def only_one_call_each(seconds=None, minuts=None, hours=None, days=None, withposarg=None):
+def only_one_call_each(seconds=None, minuts=None, hours=None, days=None, withposarg=None, startin=0):
     '''
     Decorator function : limit function call
+    - startin : No function call before this delay (seconds)
     Todo:
     - Handle keyword arg (withkeyarg)
     - Handle multiple args
@@ -159,12 +160,19 @@ def only_one_call_each(seconds=None, minuts=None, hours=None, days=None, withpos
         if locals()[var] is not None:
             _seconds += locals()[var] * delay
 
+    startat = time.time()
+    if startin:
+        startat += startin
+
     def decorator(func):
         last = {}
         def wrapper(*args, **kwargs):
             #nonlocal last
             arg = args[withposarg] if withposarg is not None else None
             if arg in last and last[arg] and last[arg] + _seconds > time.time():
+                return
+
+            if startat > time.time():
                 return
 
             func(*args, **kwargs)

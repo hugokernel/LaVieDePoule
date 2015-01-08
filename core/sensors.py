@@ -80,15 +80,15 @@ class Sensors(threading.Thread):
 
         self.callbacks_ready[name].append(callback)
 
-    def setThresholdCallback(self, threshold, callback, name=None):
+    def setThresholdCallback(self, limits, callback, name=None):
         '''
         Callback called when data on channel read !
-        Not in threshold value are saved !
+        Value not in limits are saved !
         '''
         if name not in self.callbacks_threshold:
             self.callbacks_threshold[name] = []
 
-        self.callbacks_threshold[name].append((threshold, callback))
+        self.callbacks_threshold[name].append((limits, callback))
 
     def setNotInRangeCallback(self, callback, name=None):
         '''
@@ -248,9 +248,9 @@ class Sensors(threading.Thread):
             return func
         return wrapper
 
-    def threshold(self, threshold, name):
+    def threshold(self, limits, name):
         def wrapper(func):
-            self.setThresholdCallback(threshold, func, name)
+            self.setThresholdCallback(limits, func, name)
             return func
         return wrapper
 

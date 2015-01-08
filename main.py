@@ -14,12 +14,17 @@ import time
 import arrow
 import logging
 import curses
+import re
 from fractions import Fraction
 import threading
 from datetime import datetime
 
 try:
     reload
+
+    # Python related problem with utf-8 and Python 2.x
+    reload(sys)  
+    sys.setdefaultencoding('utf8')
 except NameError:
     from importlib import reload
 
@@ -114,7 +119,7 @@ class PirActivity():
 
     def add(self):
         self.clean()
-        self.activities.append(time.time()) 
+        self.activities.append(time.time())
 
     def clean(self):
         now = time.time()
@@ -206,6 +211,11 @@ def save_to_db(name, value, last_save={}):
 def notinrange(name, value, validrange):
     logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, value, validrange))
 
+@sensor.threshold((0, 3), 'pir')
+def detect_activity(name, value, threshold):
+    logger.info('Activity detected (%s) !' % value)
+    logger.info('Lux: %s' % sensor.getLastValue('lux'))
+
 #UNIT_PER_MINUT=0.01
 UNIT_PER_MINUT=0.2
 MEASURE_COUNT=3
@@ -213,12 +223,12 @@ MIN_PERIOD=60
 @sensor.changedetect(name='1w_1', unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
 @sensor.changedetect(name='1w_2', unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
 def detect_increase(name, value):
-    print('Increase detected !', name)
+    logger.info('Increase detected (%s) !' % name)
 
 @sensor.changedetect(name='1w_1', unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
 @sensor.changedetect(name='1w_2', unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
 def detect_decrease(name, value):
-    print('Decrease detected !', name)
+    logger.info('Decrease detected (%s) !' % name)
 
 @sensor.threshold(config.TEMP_ALERT,    'temp')
 @sensor.threshold(config.VOLTAGE_ALERT, 'vbatt')
@@ -253,9 +263,9 @@ with sensor.attributes(type='switch'):
 
 with sensor.attributes(validrange=(-20, 50), type=sensor.TYPE_TEMPERATURE):
     sensor.declare('temp',   lambda: raspi.readAdc(2) * 100) # Enceinte
-    sensor.declare('1w_0',   onewire_read_temperature, (config.ONEWIRE_SENSOR0,)) # Extérieur
+    sensor.declare('1w_2',   onewire_read_temperature, (config.ONEWIRE_SENSOR0,)) # Extérieur
     sensor.declare('1w_1',   onewire_read_temperature, (config.ONEWIRE_SENSOR1,)) # Nid 1
-    sensor.declare('1w_2',   onewire_read_temperature, (config.ONEWIRE_SENSOR2,)) # Nid 2
+    sensor.declare('1w_0',   onewire_read_temperature, (config.ONEWIRE_SENSOR2,)) # Nid 2
 
 sensor.declare('pir',   pira.get, type='activity')
 
@@ -308,140 +318,35 @@ while True:
 """
 
 
+def get_status_door(door):
 
+    doors = [
+       [ SWITCH0, 'Collecteur oeuf' ],
+       [ SWITCH1, 'Porte enclos' ],
+       [ SWITCH2, 'Porte jardin' ],
+    ]
 
+    io, desc = doors[door]
 
-'''
-from __future__ import print_function
-import sys
+    return ("%s: %s" % (desc, 'ouvert' if GPIO.input(io) else 'ferme'))
 
-class config:
-    TWITTER_ACCOUNT = 'LaVieDePoule'
-    TWITTER_ACCOUNT_ADMIN = 'hugokernel'
+def get_string_from_lux(lux):
+    string = ''
+    if 0 < lux < 0.3:
+        string = dialog.lux_map[0]
+    elif 2.3 < lux < 2.6:
+        string = dialog.lux_map[1]
+    elif 2.6 < lux < 5:
+        string = dialog.lux_map[2]
+    return '%0.1f%s' % (lux, (' (' + string + ')' if string else ''))
 
-class sensor:
-    class sensors:
-        @staticmethod
-        def keys():
-            return ('1w_0', '1w_2')
-
-mention = '@LaVieDePoule !photo +toall' # Take a photo and to all (only if user is admin)
-mention = '@LaVieDePoule !sensor [+toall]'     # Get sensors values
-'''
-
-mention = ' '.join(sys.argv[1:])
-
-source = 'hugokernel'
-
-import re
-
-'''
-Syntax:
-@LaVieDePoule !photo
-@LaVieDePoule !photo(iroff)
-@LaVieDePoule !photo(exposition=20 iroff)
-'''
-
-#a = re.search(r'\!([a-z_]+)\s(.*?)', mention)
-
-m = re.search(r'@([A-Za-z0-9_]{1,15})+\s\!([a-z_]+)\s*(.*?)*$', mention)
-if m:
-    dest, cmd, cmdargs, args = m.group(1), m.group(2), [], m.group(3).split()
-
-m = re.search(r'@([A-Za-z0-9_]{1,15})+\s\!([a-z_]+)\((.*?)\)\s(.*?)$', mention)
-if m:
-    dest, cmd, cmdargs, args = m.group(1), m.group(2), m.group(3).split(), m.group(4).split()
-
-def cmd_photo(*args):
-    return 'Photo Cool !', None
-
-def cmd_sensor(*args):
-    return 'Sensors values : ' + ','.join(args), None
-
-def cmd_help(*args):
-    return 'Help: ' + str([ command for command in commands ]), None
-
-def cmd_plot(*args):
-    print('Plot args:', args)
-    return 'plot message', None
-
-commands = {
-    'help':     cmd_help,
-    'photo':    cmd_photo,
-    'sensor':   cmd_sensor,
-    'plot':     cmd_plot,
-}
-
-print(mention)
-if cmd and cmd in commands:
-    message, media = commands[cmd](*cmdargs)
-
-    if not (source == config.TWITTER_ADMIN_ACCOUNT and 'toall' in args):
-        message = '@%s %s' % (source, message)
-
-    print('Message:', message)
-
-sys.exit()
-
-'''
-if mention[1:len(config.TWITTER_ACCOUNT) + 1] == config.TWITTER_ACCOUNT:
-
-    def cmd_photo(*args):
-        return 'Cool !', None
-
-    def cmd_sensor(*args):
-        return 'Sensors values : ' + ','.join(args), None
-
-    def cmd_help(*args):
-        help_cmd = []
-        for command, data in commands.items():
-            help_cmd.append(command + (' [' + ('|'.join([ arg for arg in data[0] ])) + ']' if data[0] else ''))
-        return 'Help: ' + str(help_cmd), None
-
-    def cmd_plot(*args):
-        return '', None
-
-    commands = {
-        # !command: ((arguments,), command_callback)
-        '!help':    (None, cmd_help),
-        '!photo':   (('iroff',), cmd_photo),
-        '!sensor':  (sensor.sensors.keys(), cmd_sensor),
-        '!plot':    (('range', 'today', 'yesterday'), cmd_plot)
-    }
-
-    tokens = mention[len(config.TWITTER_ACCOUNT) + 1:].strip().split()
-
-    # First token must be a command !
-    possible_args = ('+toall')
-    cmd_found = False
-    for command, args in commands.items():
-        if tokens[0] == command:
-            cmd_found = True
-            possible_args, callback = args
-            break
-
-    if cmd_found:
-        print(tokens, possible_args)
-        valid_args = []
-        for token in tokens[1:]:
-            if possible_args and token in possible_args:
-                valid_args.append(token)
-            if token == '+toall' and source == config.TWITTER_ACCOUNT_ADMIN:
-                valid_args.append('+toall')
-
-        print('valid args:', valid_args)
-
-        text, media = callback(*valid_args)
-        if '+toall' not in valid_args:
-            text = '%s %s' % (source, text)
-        print(text)
-
-'''
-
-
-
-
-
+def get_string_from_temperatures(*args):
+    string = []
+    for i, temp in enumerate(args):
+        if temp and -20 < temp < 50:
+            sensor = dialog.sensors_map[i] + ': ' if len(dialog.sensors_map) > i else ''
+            string.append('%s%0.1f°C' % (sensor, temp))
+    return ', '.join(string)
 
 class Twitter(threading.Thread):
 
@@ -464,51 +369,174 @@ class Twitter(threading.Thread):
     def stop(self):
         self._stopevent.set()
 
-    def run(self):
+    def markProcessed(self, mention, response):
 
-        def str2dtime(date):
-            return datetime.strptime(date, '%a %b %d %H:%M:%S +0000 %Y')
+        str2dtime = lambda date: datetime.strptime(date, '%a %b %d %H:%M:%S +0000 %Y')
+
+        db.execute(TwitterActivityTable.insert().values(
+            source_id=mention['id_str'],
+            source_reply_id=mention['in_reply_to_status_id'],
+            source_user_name=mention['user']['screen_name'],
+            source_content=mention['text'],
+            source_date=str2dtime(mention['created_at']),
+            reply_id=response['id_str'],
+            reply_content=response['text'],
+            reply_date=str2dtime(response['created_at']),
+        ))
+
+        self.sources.append(int(mention['id_str']))
+
+    def commands(self, mention):
+        '''
+        mention = ' '.join(sys.argv[1:])
+
+        Syntax:
+        @LaVieDePoule !photo
+        @LaVieDePoule !photo(iroff)
+        @LaVieDePoule !plot(2014-12-01 2014-12-31)
+        '''
+
+        status = False
+
+        # Try to catch without parenthese
+        #m = re.search(r'@([A-Za-z0-9_]{1,15})+\s\!([a-z_]+)\s*(.*?)*$', mention)
+        m = re.search(r'@([A-Za-z0-9_]{1,15})+\s\!([a-z_]+)\s*(.*?)$', mention['text'])
+        if m:
+            dest, cmd, cmdargs, args = m.group(1), m.group(2), [], m.group(3).split()
+
+        if not m:
+            m = re.search(r'@([A-Za-z0-9_]{1,15})+\s\!([a-z_]+)\((.*?)\)(.*?)$', mention['text'])
+            if m:
+                dest, cmd, cmdargs, args = m.group(1), m.group(2), m.group(3).split(), m.group(4).split()
+            else:
+                return status
+
+        def cmd_photo(*args):
+            '''
+            Take a photo
+            '''
+            if cam.takePhoto():
+                return 'Cheese !', cam.photo_file
+
+        def cmd_sensor(*args):
+            '''
+            Get data from all or from some sensors
+            '''
+            if not args:
+                vbatt, lux, temp, current, temp1, temp2, temp3 = get_sensor_data()
+                return dialog.report % (get_string_from_temperatures(temp, temp1, temp2, temp3), get_string_from_lux(lux), vbatt, current), None
+            else:
+                nargs = []
+                for arg in args:
+                    try:
+                        tmp = {
+                            'nid2': '1w_0',
+                            'nid1': '1w_1',
+                            'ext':  '1w_2'
+                        }[arg]
+                    except KeyError:
+                        tmp = arg
+
+                    if tmp not in nargs:
+                        nargs.append(tmp)
+
+                values = sensor.getLastValue(nargs)
+                return ', '.join([ name + ': ' + str(value) for name, value in values.items() ]), None
+
+        def cmd_help(*args):
+            '''
+            Get all available command
+            '''
+            return 'Help: ' + str([ command for command in commands ]), None
+
+        def cmd_plot(*args):
+            '''
+            Generate plot and send it
+            '''
+            from plot import generate_plot_from_range, EXPORT_FILE
+            start, end = args[0], args[1]
+            status = generate_plot_from_range((start, end), dateformat='%d %b %H:%M')
+            return 'Data from %s to %s' % (start, end), EXPORT_FILE
+
+        commands = {
+            'help':     cmd_help,
+            'photo':    cmd_photo,
+            'sensor':   cmd_sensor,
+            'plot':     cmd_plot,
+        }
+
+        if not cmd in commands:
+            cmd = 'help'
+
+        message, media = None, None
+        data = commands[cmd](*cmdargs)
+        if data:
+            message, media = data
+
+        if not message:
+            return status
+
+        if mention['user']['screen_name'] != config.TWITTER_ADMIN_ACCOUNT or not '+toall' in args:
+            message = u'@%s %s' % (mention['user']['screen_name'], message)
+
+        if message:
+            status = self.response(mention, message, media)
+
+        return status
+
+    def response(self, mention, message, media=None):
+
+        status = False
+
+        logger.info('Sending response to twitter mention from %s, reponse: %s' % (mention['user']['screen_name'], message))
+
+        try:
+            args = {
+                'status':                   message,
+                'in_reply_to_status_id':    mention['id_str']
+            }
+            func = self.twitter.update_status
+
+            if media:
+                args['media'] = open(media, 'r')
+                func = self.twitter.update_status_with_media
+
+            response = func(**args)
+
+            status = True
+        except (TwythonError, TwythonRateLimitError) as e:
+            logger.error(e)
+
+        self.markProcessed(mention, response)
+
+        return status
+
+    @only_one_call_each(hours=3, startin=60 * 60 * 3)
+    def report(self):
+        twit_report(*get_sensor_data())
+
+    def run(self):
 
         while not self._stopevent.isSet():
 
-            #rates = self.twitter.get_application_rate_limit_status()
-            #print(rates)
-            #time.sleep(10)
-            #continue
+            self.report()
 
             mentions = self.twitter.get_mentions_timeline()
             for mention in mentions:
 
-                if int(mention['id_str']) not in self.sources:
+                # Skip if mention is already processed
+                if int(mention['id_str']) in self.sources:
+                    continue
 
-                    # Answer only mention contains 'cot'
-                    if 'cot' not in mention['text'].lower():
+                # Test if there are a command
+                if mention['user']['screen_name'] == config.TWITTER_ADMIN_ACCOUNT:
+                    if self.commands(mention):
                         continue
 
-                    message = speak(dialog.cot, username=mention['user']['screen_name'])
-
-                    logger.info('New twitter mention from %s, reponse: %s' % (mention['user']['screen_name'], message))
-
-                    try:
-                        response = self.twitter.update_status(status=message, in_reply_to_status_id=mention['id_str'])        
-
-                        ins = TwitterActivityTable.insert().values(
-                            source_id=mention['id_str'],
-                            source_reply_id=mention['in_reply_to_status_id'],
-                            source_user_name=mention['user']['screen_name'],
-                            source_content=mention['text'],
-                            source_date=str2dtime(mention['created_at']),
-                            reply_id=response['id_str'],
-                            reply_content=response['text'],
-                            reply_date=str2dtime(response['created_at']),
-                        )
-
-                        db.execute(ins)
-
-                        self.sources.append(int(mention['id_str']))
-
-                    except (TwythonError, TwythonRateLimitError) as e:
-                        logger.error(e)
+                # Answer mention contains 'cot'
+                if 'cot' in mention['text'].lower():
+                    self.response(mention, speak(dialog.cot, username=mention['user']['screen_name']))
+                    continue
 
             time.sleep(self.PERIOD)
 
@@ -699,36 +727,6 @@ class Events:
         else:
             falling(channel)
 
-def get_status_door(door):
-
-    doors = [
-       [ SWITCH0, 'Collecteur oeuf' ],
-       [ SWITCH1, 'Porte enclos' ],
-       [ SWITCH2, 'Porte jardin' ],
-    ]
-
-    io, desc = doors[door]
-
-    return ("%s: %s" % (desc, 'ouvert' if GPIO.input(io) else 'ferme'))
-
-def get_string_from_lux(lux):
-    string = ''
-    if 0 < lux < 0.3:
-        string = dialog.lux_map[0]
-    elif 2.3 < lux < 2.6:
-        string = dialog.lux_map[1]
-    elif 2.6 < lux < 5:
-        string = dialog.lux_map[2]
-    return '%0.1f%s' % (lux, (' (' + string + ')' if string else ''))
-
-def get_string_from_temperatures(*args):
-    string = []
-    for i, temp in enumerate(args):
-        if temp and -20 < temp < 50:
-            sensor = dialog.sensors_map[i] + ': ' if len(dialog.sensors_map) > i else ''
-            string.append('%s%0.1f°C' % (sensor, temp))
-    return ', '.join(string)
-
 #def read_input():
 #    return [ GPIO.input(GPIOS[index]) for index in range(0, 6) ]
 
@@ -744,33 +742,6 @@ def get_sensor_data():
 
 def twit_report(vbatt, lux, temp, current, temp1, temp2, temp3, takephoto=True):
     twit(dialog.report % (get_string_from_temperatures(temp, temp1, temp2, temp3), get_string_from_lux(lux), vbatt, current), takephoto=takephoto)
-
-class Report(threading.Thread):
-
-    def __init__(self):
-        threading.Thread.__init__(self)
-        self._stopevent = threading.Event()
-
-    def stop(self):
-        self._stopevent.set()
-
-    def run(self):
-
-        # Update your status
-        #twit('@%s Application start !' % config.TWITTER_ADMIN_ACCOUNT)
-
-        counter = 0
-
-        while not self._stopevent.isSet():
-            counter += 1
-
-            # Send tweet every 3 hours
-            if counter == 60 * 3:
-                sensors_data = get_sensor_data()
-                twit_report(*sensors_data)
-                counter = 0
-
-            time.sleep(60)
 
 if __name__ == "__main__":
 
@@ -840,9 +811,6 @@ Only in fake mode :
         '2': [ True, events.door2_falling, events.door2_rising, SWITCH2 ],
     }
 
-    rthread = Report()
-    rthread.start()
-
     while True:
 
         if kb.kbhit():
@@ -851,8 +819,6 @@ Only in fake mode :
                 print(help_string)
             elif c == 'q':
                 print('Quit...')
-                if 'rthread' in globals():
-                    rthread.stop()
                 if 'tthread' in globals():
                     tthread.stop()
                 sensor.stop()
