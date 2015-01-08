@@ -5,7 +5,8 @@ import cv2
 import numpy
 from matplotlib import pyplot
 
-CONTOUR_AREA=1200
+MIN_CAREA=700
+MAX_CAREA=2100
 
 def test_threshold(filename):
     img = cv2.imread(filename)
@@ -55,18 +56,25 @@ def alternate(images, original=None):
         else:
             break
 
-def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=CONTOUR_AREA, wsize=(30, 60), hsize=(35, 60)):
-#def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=CONTOUR_AREA, wsize=(12, 60), hsize=(12, 60)):
+def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(30, 60), hsize=(35, 60), threshold_limits=(210, 255)):
+#def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(12, 60), hsize=(12, 60)):
+
+    wsize=(30, 82)
+    hsize=(20, 62)
 
     if verbose:
-        print('Min contour area: %i' % min_carea)
-        print('Width size: %i, %i' % wsize)
-        print('Height size: %i, %i' % hsize)
+        print('\nMin contour area: %i, width size: %i, %i, height size: %i, %i' % (min_carea, wsize[0], wsize[1], hsize[0], hsize[1]))
 
     img = cv2.imread(filename)
-    imgray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     #imgray = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
 
+    IMAGE_SIZE = (1024, 768)
+    IMAGE_SUBSTRACT_WIDTH = 200
+
+    img = img[0:IMAGE_SIZE[1] / 2, IMAGE_SUBSTRACT_WIDTH / 2:IMAGE_SIZE[0] - IMAGE_SUBSTRACT_WIDTH / 2]
+
+    '''
     #imgray = cv2.medianBlur(imgray, 7)
 
     #cv2.imshow('image', imgray)
@@ -94,7 +102,6 @@ def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=CO
 
     #alternate([ i1, i2 ], img)
 
-    '''
     eroded = cv2.erode(imgray, kernel, iterations = 1)
     dilated = cv2.dilate(imgray, kernel, iterations = 1)
 
@@ -106,11 +113,9 @@ def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=CO
     return 0
     '''
 
-    imgray = cv2.erode(imgray, k0, iterations=1)
-    imgray = cv2.dilate(imgray, k1, iterations=1)
-
     #alternate([ cv2.erode(imgray, k0, iterations=1), imgray ])
 
+    '''
     doors_open = False
 
     if doors_open:
@@ -122,6 +127,39 @@ def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=CO
         ret, thresh = cv2.threshold(imgray, 80, 90, cv2.THRESH_TOZERO_INV)
         if verbose:
             print('Highlight actived !')
+    '''
+
+    def threshold(img, limits=(210, 255)):
+        #_, thresh = cv2.threshold(img, 235, 255, cv2.THRESH_TOZERO)
+        _, thresh = cv2.threshold(img, limits[0], limits[1], cv2.THRESH_TOZERO)
+        return thresh
+
+    def erode(img):
+        x = 8
+        k0 = numpy.ones((x, x), numpy.uint8)
+        return cv2.erode(img, k0, iterations=1)
+
+    def dilate(img):
+        x = 7
+        k0 = numpy.ones((x, x), numpy.uint8)
+        return cv2.dilate(img, k0, iterations=1)
+
+    
+    '''
+    imgray = cv2.erode(imgray, k0, iterations=1)
+    imgray = cv2.dilate(imgray, k1, iterations=1)
+    '''
+
+    img = threshold(img, threshold_limits)
+
+    img = erode(img)
+    img = dilate(img)
+
+
+    thresh = img
+
+    #_, thresh = cv2.threshold(imgray, 210, 255, cv2.THRESH_TOZERO)
+
     #ret, thresh = cv2.threshold(imgray, 10, 100, cv2.THRESH_TOZERO_INV)
 
     #ret,thresh = cv2.threshold(imgray,150,250,cv2.THRESH_)
@@ -141,7 +179,7 @@ def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=CO
 
     #out = img
     #out = thresh
-    out = copy.copy(imgray)
+    out = copy.copy(img)
 
     egg_count = 0
     index = 0
@@ -162,7 +200,8 @@ def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=CO
         
 
         #if 11 < len(approx) < 15:
-        if len(approx) > 5:
+        #if len(approx) > 5:
+        if 21 > len(approx) > 5:
             ellipse =  cv2.fitEllipse(cnt)
             h = ellipse[1][0]
             w = ellipse[1][1]
@@ -175,45 +214,48 @@ def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=CO
             #print "circle"
             #if 1 < h < 100 and 1 < w < 100:
             #if 20 < h < 100 and 20 < w < 100:
-            if hsize[0] < h < hsize[1] and wsize[0] < w < wsize[1]:
-
-                #if len(approx) != 16:
-                #    continue
-                #print len(approx)
-                #print cnt
-                x,y,w,h = cv2.boundingRect(cnt)
-
-                adist = cv2.arcLength(cnt, True)
-                carea = cv2.contourArea(cnt)
+            if not (hsize[0] < h < hsize[1] and wsize[0] < w < wsize[1]):
                 if verbose:
-                    print('Egg:%i, len approx: %i, height: %i, width: %i, aDist:%i, contour area:%i' % (index, len(approx), h, w, adist, carea), end=' ')
+                    print('Size not in range (w:%i, h:%i, range -> w:%i-%i, h:%i-%i)' % (w, h, wsize[0], wsize[1], hsize[0], hsize[1]))
+                continue
 
-                index += 1
-                if carea < min_carea:
-                    if verbose:
-                        print('[not found]')
-                    continue
+            #if len(approx) != 16:
+            #    continue
+            #print len(approx)
+            #print cnt
+            x,y,w,h = cv2.boundingRect(cnt)
 
+            adist = cv2.arcLength(cnt, True)
+            carea = cv2.contourArea(cnt)
+            #if verbose:
+            #    print('Egg:%i, len approx: %i, height: %i, width: %i, aDist:%i, contour area:%i' % (index, len(approx), h, w, adist, carea), end=' ')
+
+            #index += 1
+            if not (MIN_CAREA < carea < MAX_CAREA):
                 if verbose:
-                    print('[found]')
+                    print('Contour area (%i) not in range (min:%i) !' % (carea, min_carea))
+                continue
 
-                def drawInfo(out, x, y):
-                  # Write on image
-                  cv2.putText(out, str(egg_count), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 0))
-                  #img = cv2.line(img,(0,0),(511,511),(255,0,0),5)
+            if verbose:
+                print('[found]')
 
-                  cv2.drawContours(out,[cnt],0,(255,255,0),-1)
-                  cv2.rectangle(out, (x, y),(x + w, y + h), (0, 0, 255), 1)
+            def drawInfo(out, x, y):
+              # Write on image
+              cv2.putText(out, str(egg_count), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 0))
+              #img = cv2.line(img,(0,0),(511,511),(255,0,0),5)
 
-                  coordinates = x + w / 2, y + h / 2
+              cv2.drawContours(out,[cnt],0,(255,255,0),-1)
+              cv2.rectangle(out, (x, y),(x + w, y + h), (0, 0, 255), 1)
 
-                  # Draw target
-                  cv2.line(out, (x + w / 2, y), (x + w / 2, y + h), (0, 0, 255), 1)
-                  cv2.line(out,(x, y + h / 2),(x + w, y + h / 2), (0, 0, 255), 1)
+              coordinates = x + w / 2, y + h / 2
 
-                drawInfo(out, x, y)
+              # Draw target
+              cv2.line(out, (x + w / 2, y), (x + w / 2, y + h), (0, 0, 255), 1)
+              cv2.line(out,(x, y + h / 2),(x + w, y + h / 2), (0, 0, 255), 1)
 
-                egg_count += 1
+            drawInfo(out, x, y)
+
+            egg_count += 1
         #else:
             #cv2.drawContours(img,[cnt],0,(0,255,255),-1)
 
@@ -278,12 +320,16 @@ if __name__ == '__main__':
             if args['--debug']:
                 print()
 
-            carea = int(args['--contour-area']) if args['--contour-area'] else CONTOUR_AREA
+            carea = int(args['--contour-area']) if args['--contour-area'] else MIN_CAREA
 
-            if 'highlight' in flags:
-                egg_count = egg_counter(filename, doors_open=2, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
-            else:
-                egg_count = egg_counter(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+            #if 'highlight' in flags:
+            #    egg_count = egg_counter(filename, doors_open=2, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+            #else:
+            #    egg_count = egg_counter(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+            for threshold_limits in ( (210, 255), (235, 255) ):
+                egg_count = egg_counter(filename, threshold_limits=threshold_limits, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+                if egg_count:
+                    break
 
             if egg_count != count:
                 if egg_count > count:
@@ -301,6 +347,7 @@ if __name__ == '__main__':
     print("Result: %i%% (%i/%i)" % (round(100 / total * good), good, total))
     
     #if args['--verbose']:
+    print("- Egg found : %i" % egg_count)
     print("- Extra egg detected : %i" % extra)
     print("- Missed egg : %i" % missed)
 

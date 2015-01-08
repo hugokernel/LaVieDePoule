@@ -22,7 +22,7 @@ from datetime import datetime
 try:
     reload
 
-    # Python related problem with utf-8 and Python 2.x
+    # Python 2.x related problem with utf-8
     reload(sys)  
     sys.setdefaultencoding('utf8')
 except NameError:
