@@ -56,8 +56,8 @@ def alternate(images, original=None):
         else:
             break
 
-def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(30, 60), hsize=(35, 60), threshold_limits=(210, 255)):
-#def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(12, 60), hsize=(12, 60)):
+def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(30, 60), hsize=(35, 60), threshold_limits=(210, 255)):
+#def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(12, 60), hsize=(12, 60)):
 
     wsize=(30, 82)
     hsize=(20, 62)
@@ -65,143 +65,154 @@ def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=MI
     if verbose:
         print('\nMin contour area: %i, width size: %i, %i, height size: %i, %i' % (min_carea, wsize[0], wsize[1], hsize[0], hsize[1]))
 
-    img = cv2.imread(filename)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    #imgray = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+    while True:
+        img = cv2.imread(filename)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        #imgray = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
 
-    IMAGE_SIZE = (1024, 768)
-    IMAGE_SUBSTRACT_WIDTH = 200
+        IMAGE_SIZE = (1024, 768)
+        IMAGE_SUBSTRACT_WIDTH = 200
 
-    img = img[0:IMAGE_SIZE[1] / 2, IMAGE_SUBSTRACT_WIDTH / 2:IMAGE_SIZE[0] - IMAGE_SUBSTRACT_WIDTH / 2]
+        img = img[0:IMAGE_SIZE[1] / 2, IMAGE_SUBSTRACT_WIDTH / 2:IMAGE_SIZE[0] - IMAGE_SUBSTRACT_WIDTH / 2]
 
-    '''
-    #imgray = cv2.medianBlur(imgray, 7)
+        '''
+        #imgray = cv2.medianBlur(imgray, 7)
 
-    #cv2.imshow('image', imgray)
-    #cv2.waitKey(0)
+        #cv2.imshow('image', imgray)
+        #cv2.waitKey(0)
 
-    #kernel = numpy.ones((200,200),numpy.uint8)
+        #kernel = numpy.ones((200,200),numpy.uint8)
 
-    #erosion = cv2.erode(imgray,kernel,iterations = 1)
+        #erosion = cv2.erode(imgray,kernel,iterations = 1)
 
-    #imgSplit = cv2.split(im)
+        #imgSplit = cv2.split(im)
 
-    #ret,thresh = cv2.threshold(img,127,255,cv2.THRESH_TOZERO_INV)
-    #ret,thresh = cv2.threshold(imgray,127,255,1)
-    #ret,thresh = cv2.threshold(imgray,1,50,cv2.THRESH_TOZERO)
-    #ret,thresh = cv2.threshold(imgSplit[1],100,100,cv2.THRESH_TOZERO)
+        #ret,thresh = cv2.threshold(img,127,255,cv2.THRESH_TOZERO_INV)
+        #ret,thresh = cv2.threshold(imgray,127,255,1)
+        #ret,thresh = cv2.threshold(imgray,1,50,cv2.THRESH_TOZERO)
+        #ret,thresh = cv2.threshold(imgSplit[1],100,100,cv2.THRESH_TOZERO)
 
-    k0 = numpy.ones((13, 13), numpy.uint8)
-    #k0 = numpy.ones((5, 5), numpy.uint8)
-    k1 = numpy.ones((12, 12), numpy.uint8)
-    #k1 = numpy.ones((5, 5), numpy.uint8)
-    #i1 = cv2.dilate(imgray, kernel, iterations = 1)
+        k0 = numpy.ones((13, 13), numpy.uint8)
+        #k0 = numpy.ones((5, 5), numpy.uint8)
+        k1 = numpy.ones((12, 12), numpy.uint8)
+        #k1 = numpy.ones((5, 5), numpy.uint8)
+        #i1 = cv2.dilate(imgray, kernel, iterations = 1)
 
-    #kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
-    #i2 = cv2.dilate(imgray, kernel, iterations = 1)
+        #kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
+        #i2 = cv2.dilate(imgray, kernel, iterations = 1)
 
-    #alternate([ i1, i2 ], img)
+        #alternate([ i1, i2 ], img)
 
-    eroded = cv2.erode(imgray, kernel, iterations = 1)
-    dilated = cv2.dilate(imgray, kernel, iterations = 1)
+        eroded = cv2.erode(imgray, kernel, iterations = 1)
+        dilated = cv2.dilate(imgray, kernel, iterations = 1)
 
-    eroded_dilated = cv2.dilate(eroded, kernel, iterations = 1)
+        eroded_dilated = cv2.dilate(eroded, kernel, iterations = 1)
 
-    opened = cv2.morphologyEx(imgray, cv2.MORPH_OPEN, kernel)
+        opened = cv2.morphologyEx(imgray, cv2.MORPH_OPEN, kernel)
 
-    alternate([ imgray, eroded, dilated, eroded_dilated, opened ], img)
-    return 0
-    '''
+        alternate([ imgray, eroded, dilated, eroded_dilated, opened ], img)
+        return 0
+        '''
 
-    #alternate([ cv2.erode(imgray, k0, iterations=1), imgray ])
+        #alternate([ cv2.erode(imgray, k0, iterations=1), imgray ])
 
-    '''
-    doors_open = False
+        '''
+        doors_open = False
 
-    if doors_open:
-        # Porte de droite ouverte:
-        ret, thresh = cv2.threshold(imgray, 100, 100, cv2.THRESH_TOZERO)
-    else:
-        # 2 portes ouvertes:
-        #ret, thresh = cv2.threshold(imgray, 80, 200, cv2.THRESH_TOZERO_INV)
-        ret, thresh = cv2.threshold(imgray, 80, 90, cv2.THRESH_TOZERO_INV)
-        if verbose:
-            print('Highlight actived !')
-    '''
+        if doors_open:
+            # Porte de droite ouverte:
+            ret, thresh = cv2.threshold(imgray, 100, 100, cv2.THRESH_TOZERO)
+        else:
+            # 2 portes ouvertes:
+            #ret, thresh = cv2.threshold(imgray, 80, 200, cv2.THRESH_TOZERO_INV)
+            ret, thresh = cv2.threshold(imgray, 80, 90, cv2.THRESH_TOZERO_INV)
+            if verbose:
+                print('Highlight actived !')
+        '''
 
-    def threshold(img, limits=(210, 255)):
-        #_, thresh = cv2.threshold(img, 235, 255, cv2.THRESH_TOZERO)
-        _, thresh = cv2.threshold(img, limits[0], limits[1], cv2.THRESH_TOZERO)
-        return thresh
+        def threshold(img, limits=(210, 255)):
+            #_, thresh = cv2.threshold(img, 235, 255, cv2.THRESH_TOZERO)
+            _, thresh = cv2.threshold(img, limits[0], limits[1], cv2.THRESH_TOZERO)
+            return thresh
 
-    def erode(img):
-        x = 8
-        k0 = numpy.ones((x, x), numpy.uint8)
-        return cv2.erode(img, k0, iterations=1)
+        def erode(img):
+            x = 8
+            k0 = numpy.ones((x, x), numpy.uint8)
+            return cv2.erode(img, k0, iterations=1)
 
-    def dilate(img):
-        x = 7
-        k0 = numpy.ones((x, x), numpy.uint8)
-        return cv2.dilate(img, k0, iterations=1)
+        def dilate(img):
+            x = 7
+            k0 = numpy.ones((x, x), numpy.uint8)
+            return cv2.dilate(img, k0, iterations=1)
 
-    
-    '''
-    imgray = cv2.erode(imgray, k0, iterations=1)
-    imgray = cv2.dilate(imgray, k1, iterations=1)
-    '''
-
-    img = threshold(img, threshold_limits)
-
-    img = erode(img)
-    img = dilate(img)
-
-
-    thresh = img
-
-    #_, thresh = cv2.threshold(imgray, 210, 255, cv2.THRESH_TOZERO)
-
-    #ret, thresh = cv2.threshold(imgray, 10, 100, cv2.THRESH_TOZERO_INV)
-
-    #ret,thresh = cv2.threshold(imgray,150,250,cv2.THRESH_)
-
-    #element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(30,30))
-
-
-    # Otsu's thresholding after Gaussian filtering
-    #blur = cv2.GaussianBlur(imgray,(5,5),0)
-    #ret3,thresh = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-
-    #print 'Image gray'
-    #if verbose:
-    #    #cv2.imshow('image', thresh)
-    #    cv2.imshow('image', imgray)
-    #    cv2.waitKey(0)
-
-    #out = img
-    #out = thresh
-    out = copy.copy(img)
-
-    egg_count = 0
-    index = 0
-
-    #mode = cv2.RETR_EXTERNAL
-    mode = cv2.RETR_LIST
-    #mode = cv2.RETR_CCOMP
-    #mode = cv2.RETR_TREE
-
-    #method = cv2.CHAIN_APPROX_NONE
-    method = cv2.CHAIN_APPROX_SIMPLE
-    #method = cv2.CHAIN_APPROX_TC89_L1
-    #method = cv2.CHAIN_APPROX_TC89_KCOS
-    contours, h = cv2.findContours(thresh, mode, method)
-
-    for cnt in contours:
-        approx = cv2.approxPolyDP(cnt, 0.01 * cv2.arcLength(cnt, True), True)
         
+        '''
+        imgray = cv2.erode(imgray, k0, iterations=1)
+        imgray = cv2.dilate(imgray, k1, iterations=1)
+        '''
 
-        #if 11 < len(approx) < 15:
-        #if len(approx) > 5:
-        if 21 > len(approx) > 5:
+        img = threshold(img, threshold_limits)
+
+        img = erode(img)
+        img = dilate(img)
+
+
+        thresh = img
+
+        #_, thresh = cv2.threshold(imgray, 210, 255, cv2.THRESH_TOZERO)
+
+        #ret, thresh = cv2.threshold(imgray, 10, 100, cv2.THRESH_TOZERO_INV)
+
+        #ret,thresh = cv2.threshold(imgray,150,250,cv2.THRESH_)
+
+        #element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(30,30))
+
+
+        # Otsu's thresholding after Gaussian filtering
+        #blur = cv2.GaussianBlur(imgray,(5,5),0)
+        #ret3,thresh = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+
+        #print 'Image gray'
+        #if verbose:
+        #    #cv2.imshow('image', thresh)
+        #    cv2.imshow('image', imgray)
+        #    cv2.waitKey(0)
+
+        #out = img
+        #out = thresh
+        out = copy.copy(img)
+
+        egg_count = 0
+        index = 0
+
+        #mode = cv2.RETR_EXTERNAL
+        mode = cv2.RETR_LIST
+        #mode = cv2.RETR_CCOMP
+        #mode = cv2.RETR_TREE
+
+        #method = cv2.CHAIN_APPROX_NONE
+        method = cv2.CHAIN_APPROX_SIMPLE
+        #method = cv2.CHAIN_APPROX_TC89_L1
+        #method = cv2.CHAIN_APPROX_TC89_KCOS
+        contours, h = cv2.findContours(thresh, mode, method)
+
+        #print('contour:', len(contours))
+        if len(contours) > 15: #04
+            #print('risque de foirage !')
+            mint, maxt = threshold_limits
+            mint += 10
+            if mint >= 250:
+                break
+
+            threshold_limits = (mint, maxt)
+            continue
+
+        for cnt in contours:
+            approx = cv2.approxPolyDP(cnt, 0.01 * cv2.arcLength(cnt, True), True)
+            
+            if not (5 < len(approx) < 21):
+                continue
+
             ellipse =  cv2.fitEllipse(cnt)
             h = ellipse[1][0]
             w = ellipse[1][1]
@@ -256,17 +267,21 @@ def egg_counter(filename, debug=False, verbose=False, doors_open=1, min_carea=MI
             drawInfo(out, x, y)
 
             egg_count += 1
-        #else:
-            #cv2.drawContours(img,[cnt],0,(0,255,255),-1)
 
-    if debug:
-        #cv2.imshow('im',imgray)
 
-        alternate([ imgray, out, thresh ], img)
+            #else:
+                #cv2.drawContours(img,[cnt],0,(0,255,255),-1)
 
-        cv2.destroyAllWindows()
+        if debug:
+            #cv2.imshow('im',imgray)
 
-    #cv2.imwrite('out.png', out)
+            alternate([ imgray, out, thresh ], img)
+
+            cv2.destroyAllWindows()
+
+        break
+
+        #cv2.imwrite('out.png', out)
 
     return egg_count
 
@@ -323,13 +338,17 @@ if __name__ == '__main__':
             carea = int(args['--contour-area']) if args['--contour-area'] else MIN_CAREA
 
             #if 'highlight' in flags:
-            #    egg_count = egg_counter(filename, doors_open=2, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+            #    egg_count = eggcounter(filename, doors_open=2, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
             #else:
-            #    egg_count = egg_counter(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+            #    egg_count = eggcounter(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+            '''
             for threshold_limits in ( (210, 255), (235, 255) ):
-                egg_count = egg_counter(filename, threshold_limits=threshold_limits, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+                egg_count = eggcounter(filename, threshold_limits=threshold_limits, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
                 if egg_count:
                     break
+            '''
+
+            egg_count = eggcounter(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
 
             if egg_count != count:
                 if egg_count > count:
@@ -344,7 +363,7 @@ if __name__ == '__main__':
                 print('[Ok]')
                 good += 1
 
-    print("Result: %i%% (%i/%i)" % (round(100 / total * good), good, total))
+    print("Result: %i%% (%i/%i)" % (round(100 / (float(total) / float(good)) if good > 0 else 0), good, total))
     
     #if args['--verbose']:
     print("- Egg found : %i" % egg_count)
