@@ -4,21 +4,28 @@ import random
 import glob
 import time
 
+"""
 def speak(data):
     '''
     Speak random text
     '''
     out = []
-    for i in xrange(1, len(data)):
+    for i in range(1, len(data)):
         items = []
-        for weight, value in data[i]:
-            for w in xrange(weight):
+        #print(data[i])
+        #for weight, value in data[i]:
+        for item in data[i]:
+            print(item)
+            weight, value = item
+            #for w in xrange(weight):
+            for w in range(0, weight):
                 items.append(value)
 
         random.shuffle(items)
         out.append(items[0])
 
     return data[0].format(*out)
+"""
 
 def elapsed_time(seconds, suffixes=['y','w','d','h','m','s'], add_s=False, separator=' '):
     """
@@ -182,8 +189,8 @@ def only_one_call_each(seconds=None, minuts=None, hours=None, days=None, withpos
     return decorator
 
 if __name__ == '__main__':
-    result = onewire_read_temperature([0, 1, 2], basedir='/tmp/')
-    print(result)
+    #result = onewire_read_temperature([0, 1, 2], basedir='/tmp/')
+    #print(result)
 
     result = onewire_read_temperature(['10-0008008ba2a9', '28-0000061496ff', '10-0008008bceb5'], basedir='/tmp/')
     print(result)

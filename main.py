@@ -198,7 +198,7 @@ class Maxmin:
 
 @sensor.ready()
 @only_one_call_each(seconds=config.SAVE_TO_DB_EVERY, withposarg=0)
-def save_to_db(name, value, last_save={}):
+def savetodb(name, value):
     _, _, _, type = sensor.sensors[name]
     db.execute(SensorsTable.insert().values(
         type=type,
@@ -211,22 +211,20 @@ def save_to_db(name, value, last_save={}):
 def notinrange(name, value, validrange):
     logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, value, validrange))
 
-@sensor.threshold((0, 3), 'pir')
+@sensor.threshold((0, 4), 'pir')
 def detect_activity(name, value, threshold):
     logger.info('Activity detected (%s) !' % value)
     logger.info('Lux: %s' % sensor.getLastValue('lux'))
 
 #UNIT_PER_MINUT=0.01
-UNIT_PER_MINUT=0.2
+UNIT_PER_MINUT=0.13 # ~1deg / 7min
 MEASURE_COUNT=3
 MIN_PERIOD=60
-@sensor.changedetect(name='1w_1', unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
-@sensor.changedetect(name='1w_2', unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
+@sensor.changedetect(name=('1w_1', '1w_2'), unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
 def detect_increase(name, value):
     logger.info('Increase detected (%s) !' % name)
 
-@sensor.changedetect(name='1w_1', unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
-@sensor.changedetect(name='1w_2', unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
+@sensor.changedetect(name=('1w_1', '1w_2'), unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
 def detect_decrease(name, value):
     logger.info('Decrease detected (%s) !' % name)
 
@@ -261,17 +259,26 @@ with sensor.attributes(type='switch'):
     sensor.declare('door1',      lambda: GPIO.input(SWITCH1))
     sensor.declare('door2',      lambda: GPIO.input(SWITCH2))
 
-with sensor.attributes(validrange=(-20, 50), type=sensor.TYPE_TEMPERATURE):
-    sensor.declare('temp',   lambda: raspi.readAdc(2) * 100) # Enceinte
-    sensor.declare('1w_2',   onewire_read_temperature, (config.ONEWIRE_SENSOR0,)) # Extérieur
-    sensor.declare('1w_1',   onewire_read_temperature, (config.ONEWIRE_SENSOR1,)) # Nid 1
-    sensor.declare('1w_0',   onewire_read_temperature, (config.ONEWIRE_SENSOR2,)) # Nid 2
+TEMP_VALID_RANGE = (-30, 50)
+def read_onewire(address, maxretry=5, validrange=TEMP_VALID_RANGE):
+    retry = 0
+    while True:
+        result = onewire_read_temperature(address)
+        if validrange[0] < result < validrange[1]:
+            return result
+        retry += 1
+        if retry >= maxretry:
+            return None
+
+with sensor.attributes(validrange=TEMP_VALID_RANGE, type=sensor.TYPE_TEMPERATURE):
+    sensor.declare('temp',   lambda: raspi.readAdc(2) * 100)         # Enceinte
+    sensor.declare('1w_0',   read_onewire, config.ONEWIRE_SENSOR2)   # Extérieur
+    sensor.declare('1w_1',   read_onewire, config.ONEWIRE_SENSOR1)   # Nid 1
+    sensor.declare('1w_2',   read_onewire, config.ONEWIRE_SENSOR0)   # Nid 2
 
 sensor.declare('pir',   pira.get, type='activity')
 
 #sensor.setNotInRangeCallback(lambda name, value, validrange: logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, value, validrange)))
-#sensor.setReadyCallback(save_to_db)
-
 #sensor.setReadyCallback(detect_increase, '1w_1')
 
 '''
@@ -826,6 +833,9 @@ Only in fake mode :
             elif c == 'c':
                 print('Reload config !')
                 reload(config)
+
+                # Dump config
+                print('\n'.join([ '%s: %s' % (name, getattr(config, name)) for name in dir(config) if name[0:2] != '__' ]))
             elif c == 'p':
                 twit('Cheese !', takephoto=True)
             elif c == 'r':

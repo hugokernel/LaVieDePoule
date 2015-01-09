@@ -1,4 +1,5 @@
 LaVieDePoule
 ============
 
-Le premier poulailler connecté
+Le premier poulailler à accepté la présence de Python !
+

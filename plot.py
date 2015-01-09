@@ -18,10 +18,10 @@ from core.db import SensorsTable, sqla, db
 EXPORT_FILE = '/tmp/plot.png'
 
 info = OrderedDict()
-info['1w_2'] = (u'Extérieur',  'violet')
+info['1w_0'] = (u'Extérieur',  'violet')
 info['temp'] = ('Enceinte',   'red')
 info['1w_1'] = ('Nid 1',      'green')
-info['1w_0'] = ('Nid 2',      'blue')
+info['1w_2'] = ('Nid 2',      'blue')
 info['lux']  = (u'Luminosité', ( 'orange', True ))
 info['pir'] = ('PIR',         'black')
 

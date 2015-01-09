@@ -16,30 +16,30 @@ stats_lastmonth = "Stats du mois passée (%s) #statsmois"
 cot = (
     '@%username% {0}',
     (
-        (1, 'Cot'),
-        (1, 'CotCot'),
-        (1, 'CotCotCot'),
-        (1, 'CotCot ?'),
-        (1, 'Cot !'),
+        'Cot',
+        'CotCot',
+        'CotCotCot',
+        'CotCot ?',
+        'Cot !',
     )
 )
 
 enclos = (
-    (1, 'la basse-cour'),
-    (1, 'l\'enclos')
+    'la basse-cour',
+    'l\'enclos'
 )
 
 garden_full = (
     '{0} {1} {2}',
     (
-        (1, 'Cool !'),
-        (1, 'Chouette !'),
-        (1, 'Super !')
+        'Cool !',
+        'Chouette !',
+        'Super !'
     ),
     (
-        (1, 'On sort dans tout le jardin !'),
-        (1, 'Openbar dans tout le jardin !'),
-        (1, 'Accès au jardin, planquez-vous les vers, on arrive !')
+        'On sort dans tout le jardin !',
+        'Openbar dans tout le jardin !',
+        'Accès au jardin, planquez-vous les vers, on arrive !'
     ),
     (
         (4, ''),
@@ -50,11 +50,11 @@ garden_full = (
 garden_close = (
     '{0}',
     (
-        (1, 'On rentre du jardin après %time% !'),
-        (1, 'Après %time% de {0} dans le jardin, on rentre !', (
-            ( 1, 'folie' ),
-            ( 1, 'délire' ),
-            ( 1, 'repas' )
+        'On rentre du jardin après %time% !',
+        ('Après %time% de {0} dans le jardin, on rentre !', (
+            'folie',
+            'délire',
+            'repas'
         )),
     )
 )
@@ -62,34 +62,34 @@ garden_close = (
 garden_close_light = (
     '{0}',
     (
-        (1, 'Toutes les bonnes choses ont une fin, nous rentrons du jardin !'),
-        (1, 'Fini le jardin, on rentre !'),
+        'Toutes les bonnes choses ont une fin, nous rentrons du jardin !',
+        'Fini le jardin, on rentre !',
     )
 )
 
 collect_egg = (
     '{0}',
     (
-        (1, 'Collecte des oeufs ! La dernière date de %time_last% !'),
+        'Collecte des oeufs ! La dernière date de %time_last% !',
     )
 )
 
 collect_egg_light = (
     '{0}',
     (
-        (1, 'Tiens, on vient collecter nos oeufs !'),
-        (1, "C'est l'heure de la collecte des oeufs !"),
-        (1, 'Hop, la main vient prendre nos oeufs !'),
+        'Tiens, on vient collecter nos oeufs !',
+        "C'est l'heure de la collecte des oeufs !",
+        'Hop, la main vient prendre nos oeufs !',
     )
 )
 
 enclosure = (
     '{0}',
     (
-        (1, 'Porte de {0} ouverte !', enclos),
-        (1, '{0}, on peut sortir dans notre enclos !', (
-            (1, 'Cotcot'),
-            (1, 'Chouette')
+        ('Porte de {0} ouverte !', enclos),
+        ('{0}, on peut sortir dans notre enclos !', (
+            ('Cotcot'),
+            ('Chouette')
         ))
     )
 )
@@ -97,15 +97,41 @@ enclosure = (
 enclosure_close = (
     '{0}',
     (
-        (1, 'Après %time%, on rentre de {0} !', enclos),
+        ('Après %time%, on rentre de {0} !', enclos),
     )
 )
 
 enclosure_close_light = (
     '{0}',
     (
-        (1, 'Fermeture de la porte de {0} !', enclos),
-        (1, 'On rentre de {0} !', enclos),
+        ('Fermeture de la porte de {0} !', enclos),
+        ('On rentre de {0} !', enclos),
+    )
+)
+
+egg_detected = (
+    '{0}',
+    (
+        'Un oeuf à été détecté !',
+        'Alerte oeuf !',
+        ('{0}, un oeuf !', (
+            'Chic',
+            'Chouette',
+            'Super'
+        )),
+    )
+)
+
+eggs_detected = (
+    '{0}',
+    (
+        '%count% oeufs ont été détectés !',
+        'Alerte oeufs !',
+        ('{0}, des oeufs !', (
+            'Chic',
+            'Chouette',
+            'Super'
+        )),
     )
 )
 

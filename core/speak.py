@@ -62,13 +62,22 @@ def speak(data, **kwargs):
     def render(data, out=[], startat=1):
         line = []
         for items in data[startat:]:
-            assert(type(items) is tuple)
-            assert(0 < len(items) < 4)
-            if len(items) == 1:
-                weight, item = 1, items[0]
+            assert(type(items) in (tuple, str))
+            assert(type(str) or (type(tuple) and 0 < len(items) < 4))
+            assert(type(str) or (len(items) in (1, 3) or len(items) == 2 and type(items[1]) in (str, tuple)))
+            weight, payload = 1, []
+            if type(items) == str:
+                item = items
+                items = (weight, item)
+            elif len(items) == 1:
+                item = items[0]
             elif len(items) == 2:
-                weight, item = items
-                payload = None
+                if type(items[1]) == tuple:
+                    item, payload = items[0], items[1]
+                    items = (weight, item, payload)
+                else:
+                    weight, item = items
+                    payload = None
             elif len(items) == 3:
                 weight, item, payload = items
 
@@ -113,7 +122,7 @@ def speak(data, **kwargs):
 
     # Replace argument
     for key, value in list(kwargs.items()):
-        string = string.replace('%' + key + '%', value)
+        string = string.replace('%' + key + '%', str(value))
 
     return string
 

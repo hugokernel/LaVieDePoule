@@ -2,6 +2,7 @@
 import time
 import threading
 from contextlib import contextmanager
+import collections
 
 class Sensors(threading.Thread):
 
@@ -14,7 +15,7 @@ class Sensors(threading.Thread):
     TYPE_CURRENT     = 'current'
 
     # Refresh period in second
-    period = 60 * 5
+    period = 60
 
     sensors = {}
 
@@ -30,7 +31,7 @@ class Sensors(threading.Thread):
     default_validrange = None
     default_type = None
 
-    def __init__(self, period=60 * 5):
+    def __init__(self, period=period):
         threading.Thread.__init__(self)
         self._stopevent = threading.Event()
 
@@ -130,12 +131,18 @@ class Sensors(threading.Thread):
 
                 callback, params, validrange, _ = data
                 if params:
-                    result = callback(*params)
+                    #result = callback(*params if type(params) in (tuple, list) else params)
+                    if type(params) in (tuple, list):
+                        result = callback(*params)
+                    elif type(params) is dict:
+                        result = callback(**params)
+                    else:
+                        result = callback(params)
                 else:
                     result = callback()
 
                 # Todo: Handle case when result is None
-                if not result:
+                if result is None:
                     continue
 
                 # Save only if in valid range !
@@ -153,7 +160,7 @@ class Sensors(threading.Thread):
                     for data in self.callbacks_threshold[name]:
                         threshold, callback = data
                         _min, _max = threshold(name) if callable(threshold) else threshold
-                        if not (_min < result < _max):
+                        if not (_min <= result <= _max):
                             callback(name, result, (_min, _max))
 
                 # Call ready callbacks
@@ -193,6 +200,9 @@ class Sensors(threading.Thread):
         measure_count: Count of successfully grow measures
         min_period: Minimum period
         '''
+
+        names = name if type(name) in (list, tuple) else (name,)
+
         compare = '__gt__' if unit_per_minut > 0 else '__lt__'
         def decorator(func):
             def wrapper(name, value, values=[None] * measure_count, last_time=type('X', (object,), { 'value': None })):
@@ -224,6 +234,7 @@ class Sensors(threading.Thread):
                             if not change:
                                 break
 
+                            #print('change: %s, name: %s, coeff: %s' % (change, name, coeff), coeff, type(coeff))
                             if unit_per_minut and unit_per_minut > abs((values[i] - last) * coeff):
                                 change = False
                                 break
@@ -232,7 +243,9 @@ class Sensors(threading.Thread):
                     if change:
                         return func(name, value)
 
-            self.setReadyCallback(wrapper, name)
+            for item in names:
+                self.setReadyCallback(wrapper, name)
+
             return wrapper
         return decorator
 
