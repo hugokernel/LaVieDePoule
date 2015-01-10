@@ -5,8 +5,11 @@ import cv2
 import numpy
 from matplotlib import pyplot
 
-MIN_CAREA=700
-MAX_CAREA=2100
+MIN_CAREA = 700
+MAX_CAREA = 2100
+
+IMAGE_SIZE = (1024, 768)
+IMAGE_SUBSTRACT_WIDTH = 200
 
 def test_threshold(filename):
     img = cv2.imread(filename)
@@ -56,11 +59,10 @@ def alternate(images, original=None):
         else:
             break
 
-def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(30, 60), hsize=(35, 60), threshold_limits=(210, 255)):
+def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(30, 82), hsize=(20, 62), threshold_limits=(210, 255)):
 #def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(12, 60), hsize=(12, 60)):
 
-    wsize=(30, 82)
-    hsize=(20, 62)
+    nest_index = None
 
     if verbose:
         print('\nMin contour area: %i, width size: %i, %i, height size: %i, %i' % (min_carea, wsize[0], wsize[1], hsize[0], hsize[1]))
@@ -69,9 +71,6 @@ def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN
         img = cv2.imread(filename)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         #imgray = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
-
-        IMAGE_SIZE = (1024, 768)
-        IMAGE_SUBSTRACT_WIDTH = 200
 
         img = img[0:IMAGE_SIZE[1] / 2, IMAGE_SUBSTRACT_WIDTH / 2:IMAGE_SIZE[0] - IMAGE_SUBSTRACT_WIDTH / 2]
 
@@ -266,6 +265,8 @@ def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN
 
             drawInfo(out, x, y)
 
+            nest_index = 1 if x > ((IMAGE_SIZE[0] - IMAGE_SUBSTRACT_WIDTH) / 2) else 2
+
             egg_count += 1
 
 
@@ -283,7 +284,7 @@ def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN
 
         #cv2.imwrite('out.png', out)
 
-    return egg_count
+    return egg_count, nest_index
 
 if __name__ == '__main__':
 
@@ -307,7 +308,7 @@ if __name__ == '__main__':
 
     args = docopt(help, version='0.1')
 
-    total = good = extra = missed = 0
+    total = good = extra = missed = badnest = 0
     for filename in args['<name>']:
         if args['--test-threshold']:
             test_threshold(filename)
@@ -328,9 +329,12 @@ if __name__ == '__main__':
                 print("Open %s" % (filename), end=' ')
 
             if flags:
-                flags = flags.split('-')
-                if args['--verbose']:
-                    print('(flags: ' + ', '.join([ flag for flag in flags ]) + ')', end=' ')
+                if flags in ('1', '2'):
+                    nest = int(flags)
+                else:
+                    flags = flags.split('-')
+                    if args['--verbose']:
+                        print('(flags: ' + ', '.join([ flag for flag in flags ]) + ')', end=' ')
 
             if args['--debug']:
                 print()
@@ -348,19 +352,25 @@ if __name__ == '__main__':
                     break
             '''
 
-            egg_count = eggcounter(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+            egg_count, nest_index = eggcounter(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
 
             if egg_count != count:
                 if egg_count > count:
                     extra += egg_count - count
                 else:
                     missed += count - egg_count
+
                 if args['--verbose']:
                     print('[Error] %i egg(s) found !' % (egg_count))
                 else:
                     print('[Error]')
             else:
-                print('[Ok]')
+                if nest_index and nest_index != nest:
+                    badnest += 1
+                    print('[Error] Bad nest !')
+                else:
+                    print('[Ok]')
+
                 good += 1
 
     print("Result: %i%% (%i/%i)" % (round(100 / (float(total) / float(good)) if good > 0 else 0), good, total))
@@ -369,4 +379,5 @@ if __name__ == '__main__':
     print("- Egg found : %i" % egg_count)
     print("- Extra egg detected : %i" % extra)
     print("- Missed egg : %i" % missed)
+    print("- Bad nest : %i" % badnest)
 
