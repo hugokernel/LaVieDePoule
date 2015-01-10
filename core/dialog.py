@@ -112,9 +112,9 @@ enclosure_close_light = (
 egg_detected = (
     '{0}',
     (
-        'Un oeuf à été détecté !',
-        'Alerte oeuf !',
-        ('{0}, un oeuf !', (
+        'Un oeuf à été détecté dans le nid %nest_index% !',
+        'Alerte oeuf dans le nid %nest_index% !',
+        ('{0}, un oeuf dans le nid %nest_index% !', (
             'Chic',
             'Chouette',
             'Super'
