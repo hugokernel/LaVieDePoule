@@ -40,6 +40,9 @@ from core import dialog
 
 from config import general as config, secret
 
+if config.WEBSERVER_ON:
+    from web import start as webstart
+
 if config.FAKE_MODE:
     from core.fake import (  PiCamera, GPIO,
                             Twython, TwythonError, TwythonRateLimitError,
@@ -154,7 +157,7 @@ while True:
 
 pira = PirActivity()
 
-sensor = Sensors(1 if config.FAKE_MODE else 10)
+sensor = Sensors(1 if config.FAKE_MODE else 2 * 60)
 
 def get_maxima(name):
     c = SensorsTable.c
@@ -341,7 +344,7 @@ def get_string_from_lux(lux):
     string = ''
     if 0 < lux < 0.3:
         string = dialog.lux_map[0]
-    elif 2.3 < lux < 2.6:
+    elif 2.3 < lux <= 2.6:
         string = dialog.lux_map[1]
     elif 2.6 < lux < 5:
         string = dialog.lux_map[2]
@@ -778,6 +781,9 @@ if __name__ == "__main__":
     cam.setCallback(IR_ON, IR_OFF)
 
     events = Events()
+
+    if 'webapp' in globals():
+        webstart(host=config.WEBSERVER_HOST, port=config.WEBSERVER_PORT)
 
     if config.TWITTER_ON:
         tthread = Twitter(twt)

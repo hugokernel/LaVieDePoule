@@ -38,3 +38,11 @@ Save to db every x seconds
 '''
 SAVE_TO_DB_EVERY = 60
 
+'''
+Web server
+'''
+WEBSERVER_ON = True
+
+WEBSERVER_HOST = '127.0.0.1'
+WEBSERVER_PORT = 8080
+
