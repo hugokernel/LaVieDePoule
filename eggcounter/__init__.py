@@ -59,8 +59,8 @@ def alternate(images, original=None):
         else:
             break
 
-def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(30, 82), hsize=(20, 62), threshold_limits=(210, 255)):
-#def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(12, 60), hsize=(12, 60)):
+def scan_image(filename, export_file=None, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(30, 82), hsize=(20, 62), threshold_limits=(210, 255)):
+#def scan_image(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(12, 60), hsize=(12, 60)):
 
     nest_index = None
 
@@ -69,6 +69,7 @@ def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN
 
     while True:
         img = cv2.imread(filename)
+        out = copy.copy(img)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         #imgray = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
 
@@ -179,7 +180,6 @@ def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN
 
         #out = img
         #out = thresh
-        out = copy.copy(img)
 
         egg_count = 0
         index = 0
@@ -249,21 +249,25 @@ def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN
             if verbose:
                 print('[found]')
 
-            def drawInfo(out, x, y):
-              # Write on image
-              cv2.putText(out, str(egg_count), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 0))
-              #img = cv2.line(img,(0,0),(511,511),(255,0,0),5)
+            def drawInfo(out, x, y, x_offset):
 
-              cv2.drawContours(out,[cnt],0,(255,255,0),-1)
-              cv2.rectangle(out, (x, y),(x + w, y + h), (0, 0, 255), 1)
+                x += x_offset
 
-              coordinates = x + w / 2, y + h / 2
+                # Write on image
+                cv2.putText(out, str(egg_count), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 0))
+                #img = cv2.line(img,(0,0),(511,511),(255,0,0),5)
 
-              # Draw target
-              cv2.line(out, (x + w / 2, y), (x + w / 2, y + h), (0, 0, 255), 1)
-              cv2.line(out,(x, y + h / 2),(x + w, y + h / 2), (0, 0, 255), 1)
+                cv2.drawContours(out,[cnt+(x_offset, 0)],0,(255,255,0),-1)
+                cv2.rectangle(out, (x, y),(x + w, y + h), (0, 0, 255), 1)
 
-            drawInfo(out, x, y)
+                coordinates = x + w / 2, y + h / 2
+
+                # Draw target
+                cv2.line(out, (x + w / 2, y), (x + w / 2, y + h), (0, 0, 255), 1)
+                cv2.line(out,(x, y + h / 2),(x + w, y + h / 2), (0, 0, 255), 1)
+
+            #drawInfo(out, x, y)
+            drawInfo(out, x, y, IMAGE_SUBSTRACT_WIDTH / 2)
 
             nest_index = 1 if x > ((IMAGE_SIZE[0] - IMAGE_SUBSTRACT_WIDTH) / 2) else 2
 
@@ -282,7 +286,8 @@ def eggcounter(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN
 
         break
 
-        #cv2.imwrite('out.png', out)
+    if egg_count and export_file:
+        cv2.imwrite(export_file, out)
 
     return egg_count, nest_index
 
@@ -342,17 +347,17 @@ if __name__ == '__main__':
             carea = int(args['--contour-area']) if args['--contour-area'] else MIN_CAREA
 
             #if 'highlight' in flags:
-            #    egg_count = eggcounter(filename, doors_open=2, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+            #    egg_count = scan_image(filename, doors_open=2, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
             #else:
-            #    egg_count = eggcounter(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+            #    egg_count = scan_image(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
             '''
             for threshold_limits in ( (210, 255), (235, 255) ):
-                egg_count = eggcounter(filename, threshold_limits=threshold_limits, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+                egg_count = scan_image(filename, threshold_limits=threshold_limits, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
                 if egg_count:
                     break
             '''
 
-            egg_count, nest_index = eggcounter(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+            egg_count, nest_index = scan_image(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
 
             if egg_count != count:
                 if egg_count > count:

@@ -4,8 +4,7 @@ from bottle import get, route, request, run, template, static_file, jinja2_view,
 from config import general as config
 
 @route('/')
-@jinja2_view('main.html', template_lookup=['templates'], getRoot=getRoot)
-@Helper.loader
+@jinja2_view('main.html', template_lookup=['templates'])#, getRoot=getRoot)
 def home(todo=None):
     return {}
 

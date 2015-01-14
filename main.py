@@ -37,6 +37,7 @@ from core.functions import FifoBuffer, only_one_call_each, get_time
 from core.sensors import Sensors
 from core.speak import speak
 from core import dialog
+from eggcounter import scan_image
 
 from config import general as config, secret
 
@@ -548,7 +549,29 @@ class Twitter(threading.Thread):
                     self.response(mention, speak(dialog.cot, username=mention['user']['screen_name']))
                     continue
 
+            self.eggScan()
+
             time.sleep(self.PERIOD)
+
+    egg_filename = '/tmp/egg.png'
+    @only_one_call_each(hours=1)
+    def eggScan(self):
+        print('egg scan')
+        if cam.takePhoto(filename=self.egg_filename):
+            egg_count, egg_index = scan_image(self.egg_filename)
+            logger.debug('Egg found (count:%i, index:%i) !' % (egg_count, egg_index))
+            if egg_count:
+                self.eggDetected(egg_count, egg_index)
+
+    @only_one_call_each(days=1, withposarg=1)
+    def eggDetected(self, count, index):
+        if count == 1:
+            message = speak(dialog.egg_detected, nest_index=index)
+        elif count > 1:
+            message = speak(dialog.eggs_detected, count=count)
+
+        self.twitter.update_status_with_media(status=message, media=open(self.egg_filename, 'r'))
+
 
 '''
 # Get your "home" timeline

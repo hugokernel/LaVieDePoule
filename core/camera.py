@@ -31,7 +31,7 @@ class Camera:
         self.callback_after = callback_after
 
     @include
-    def takePhoto(self, resolution=resolution, low_light=False):
+    def takePhoto(self, resolution=resolution, low_light=False, filename=photo_file):
         with PiCamera() as camera:
             camera.resolution = resolution
 
@@ -44,15 +44,15 @@ class Camera:
                 # (you may wish to use fixed AWB instead)
                 time.sleep(10)
 
-            camera.capture(self.photo_file)
+            camera.capture(filename)
 
         return True
 
     @include
-    def takeVideo(self, duration, resolution=resolution):
+    def takeVideo(self, duration, resolution=resolution, filename=video_file):
         with PiCamera() as camera:
             camera.resolution = resolution
-            camera.start_recording(self.video_file)
+            camera.start_recording(filename)
             camera.wait_recording(duration)
             camera.stop_recording()
 
