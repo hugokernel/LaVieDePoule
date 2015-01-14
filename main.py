@@ -41,8 +41,8 @@ from eggcounter import scan_image
 
 from config import general as config, secret
 
-if config.WEBSERVER_ON:
-    from web import start as webstart
+if config.SERVER_ON:
+    from www import start as webstart
 
 if config.FAKE_MODE:
     from core.fake import (  PiCamera, GPIO,
@@ -221,7 +221,8 @@ def detect_activity(name, value, threshold):
     logger.info('Lux: %s' % sensor.getLastValue('lux'))
 
 #UNIT_PER_MINUT=0.01
-UNIT_PER_MINUT=0.13 # ~1deg / 7min
+#UNIT_PER_MINUT=0.13 # ~1deg / 7min
+UNIT_PER_MINUT=0.05 # ~1deg / 7min
 MEASURE_COUNT=3
 MIN_PERIOD=60
 @sensor.changedetect(name=('1w_1', '1w_2'), unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
@@ -775,6 +776,16 @@ def get_sensor_data():
 
 def twit_report(vbatt, lux, temp, current, temp1, temp2, temp3, takephoto=True):
     twit(dialog.report % (get_string_from_temperatures(temp, temp1, temp2, temp3), get_string_from_lux(lux), vbatt, current), takephoto=takephoto)
+
+
+'''
+if 'webstart' in globals():
+    webstart(host=config.SERVER_HOST, port=config.SERVER_PORT, debug=config.FAKE_MODE)
+
+while True:
+    time.sleep(2)
+'''
+
 
 if __name__ == "__main__":
 
