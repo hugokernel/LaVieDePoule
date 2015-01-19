@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="description" content="">
+    <meta name="keywords" content="">
+    <meta name="author" content="hugokernel">
+    <title>La vie de poule</title>
+
+    <link rel="shortcut icon" href="static/img/favicon.png">
+
+    <link href="static/css/bootstrap.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="static/css/bootstrap-theme.min.css">
+    <link rel="stylesheet" href="static/css/bootstrap-editable.css">
+    <link rel="stylesheet" href="static/css/todo.css">
+
+    <script src="static/js/jquery-1.11.1.min.js"></script>
+    <script src="static/js/bootstrap.min.js"></script>
+    <script src="static/js/bootstrap-editable.min.js"></script>
+    <script src="static/js/bootstrap3-typeahead.js"></script>
+    <script src="static/js/todo.js"></script>
+
+    <script>
+        var HOST = '{{ HOST }}';
+        var PORT = '{{ PORT }}';
+    </script>
+
+</head>
+
+<body>
+
+<div class="container">
+    <h1>La vie de poule</h1>
+
+    <p>
+        WebSocket status : <span id="message"></span>
+        <a href="#" id="3dview-handler">3D view</a>
+    </p>
+
+    <div class="row">
+
+        <div class="span2">
+
+            <h2>Power</h2>
+
+            <p>
+                <strong>Voltage :</strong> <span id="batteryVoltage"></span>V
+            </p>
+
+            <p>
+                <strong>Current :</strong> <span id="current"></span>A
+            </p>
+        </div>
+
+        <div class="span3">
+
+            <h2>Accelerometer</h2>
+
+            <table id="acc" class="table table-bordered">
+                <tr>
+                    <th>x</th>
+                    <th>y</th>
+                    <th>z</th>
+                </tr>
+                <tr>
+                    <td id="acc-x">-</td>
+                    <td id="acc-y">-</td>
+                    <td id="acc-z">-</td>
+                </tr>
+            </table>
+
+        </div>
+
+        <div class="span3">
+
+            <h2>Compass</h2>
+
+            <table id="compass" class="table table-bordered">
+                <tr>
+                    <th>x</th>
+                    <th>y</th>
+                    <th>z</th>
+                </tr>
+                <tr>
+                    <td id="compass-x">-</td>
+                    <td id="compass-y">-</td>
+                    <td id="compass-z">-</td>
+                </tr>
+            </table>
+
+            <p>
+                <strong>Heading :</strong> <span id="compass-heading"></span>
+            </p>
+        </div>
+
+        <div class="span3">
+
+            <h2>Ground</h2>
+
+            <table id="ground" class="table table-bordered">
+                <tr>
+                    <td id="ground-1">&nbsp;</td>
+                    <td id="ground-3">&nbsp;</td>
+                    <td id="ground-5">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td id="ground-0">&nbsp;</td>
+                    <td id="ground-2">&nbsp;</td>
+                    <td id="ground-4">&nbsp;</td>
+                </tr>
+            </table>
+
+        </div>
+
+        <p id="current"></p>
+    </div>
+
+    <ul id="tabs" class="nav nav-tabs" data-tabs="tabs">
+        <li class="active"><a href="#drive" data-toggle="tab" data-name="drive">Drive</a></li>
+        <li><a href="#move" data-toggle="tab" data-name="move">Move</a></li>
+        <li><a href="#sensors" data-toggle="tab" data-name="sensors">Sensors</a></li>
+        <li><a href="#legs" data-toggle="tab" data-name="legs">Legs</a></li>
+        <li><a href="#system" data-toggle="tab" data-name="system">System</a></li>
+    </ul>
+
+    <div class="tab-content">
+        <div class="tab-pane active " id="drive">
+            Drive :
+            <div class="btn-group">
+                <button type="button" class="btn btn-default" id="btn-left">Left</button>
+                <button type="button" class="btn btn-default" id="btn-forward">Forward</button>
+                <button type="button" class="btn btn-default" id="btn-reverse">Reverse</button>
+                <button type="button" class="btn btn-default" id="btn-right">Right</button>
+            </div>
+
+            <hr />
+
+            Sequence :
+            <div class="btn-group">
+                <button type="button" class="btn btn-default btn-sequence" id="btn-pushup" data-sequence="pushup">Push up</button>
+                <button type="button" class="btn btn-default btn-sequence" id="btn-middle" data-sequence="middle">Middle</button>
+                <button type="button" class="btn btn-default btn-sequence" id="btn-standby" data-sequence="standby">Stand-by</button>
+                <button type="button" class="btn btn-default btn-sequence" id="btn-release" data-sequence="release">Release</button>
+            </div>
+
+            <hr />
+
+            Servo :
+            <div class="btn-group">
+                <button type="button" class="btn btn-default btn-servo" data-command="init">Init</button>
+                <button type="button" class="btn btn-default btn-servo" data-command="pause">Pause</button>
+                <button type="button" class="btn btn-default btn-servo" data-command="resume">Resume</button>
+            </div>
+
+            <hr />
+
+            <div class="span1">
+                Speed :
+                <div id="speed-slide" class="slider"></div>
+            </div>
+        </div>
+
+        <div class="tab-pane" id="sensors">
+
+            <div id="voltage-graph" class="left" style="width:400px;height:300px">
+                Voltage
+            </div>
+
+            <div id="current-graph" class="right" style="width:400px;height:300px">
+                Current
+            </div>
+
+            <div id="accelerometer-graph" class="left" style="width:400px;height:300px">
+                Accelerometer
+            </div>
+
+            <div id="compass-graph" class="right" style="width:400px;height:300px">
+                Compass
+            </div>
+
+        </div>
+
+        <div class="tab-pane" id="legs">
+
+            <div id="legs-graph" class="left" style="width:900px;height:400px">
+                Legs
+            </div>
+
+            <select id="legs-selector" multiple="multiple">
+                <option value="0" selected="selected">0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
+                <option value="11">11</option>
+            </select>
+
+        </div>
+
+        <div class="tab-pane" id="system">
+
+            <button type="button" class="btn btn-default btn-action" data-action="reset">Hard reset</button>
+
+            <hr />
+
+            <div class="checkbox">
+                <label>
+                    <input type="checkbox" value="0" id="livemode">
+                    Live mode
+                </label>
+            </div>
+
+            <hr />
+
+            <h4>Logger</h4>
+
+            <p>
+                Default :
+            </p>
+
+            <select class="form-control" id="loglevel">
+              <option value="debug">Debug</option>
+              <option value="info">Info</option>
+              <option value="warning">Warning</option>
+              <option value="error">Error</option>
+              <option value="critical">Critical</option>
+            </select>
+
+            <p>
+                Js :
+            </p>
+
+            <select class="form-control" id="jsloglevel">
+              <option value="debug">Debug</option>
+              <option value="info">Info</option>
+              <option value="warning">Warning</option>
+              <option value="error">Error</option>
+              <option value="critical">Critical</option>
+            </select>
+
+        </div>
+
+    </ul>
+
+</div>
+
+    <p id="footer">
+        <a href="https://github.com/hugokernel/LaVieDePoule">GitHub / LaVieDePoule</a>
+    </p>
+
+</body>
+
+</html>

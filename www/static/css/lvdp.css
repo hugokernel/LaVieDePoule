@@ -1,0 +1,122 @@
+
+.container-fluid {
+    margin-top: 20px;
+}
+
+.context {
+    font-style: italic;
+    color: green;
+}
+
+.project {
+    font-weight: bold;
+    color: red;
+}
+
+.date {
+    color: #CCCC00;
+}
+
+.priority {
+    font-weight: bold;
+    color: violet;
+}
+
+.priority-a {
+    background-color: #FCC;
+}
+
+.priority-a.highlight {
+    background-color: #FCC;
+}
+
+.highlight {
+    background-color: #FFC !important;
+}
+
+.deleted {
+    background-color: #DDD !important;
+}
+
+.link-action {
+    float: right;
+    display: block;
+    margin-right: 10px;
+}
+
+.error {
+    margin: 2px;
+    padding: 5px;
+}
+
+.project:hover, .context:hover {
+}
+
+.list-group-item:hover {
+    background-color: #FFE;
+}
+
+.possible {
+    background-color: #FFE;
+}
+
+.selected {
+    background-color: #FFC;
+}
+
+.todo input, .todoinput {
+    width: 100% !important;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background-color: #EEE;
+}
+
+#line-new {
+    background-color: #FFD;
+}
+
+#footer {
+    position: fixed;
+    bottom: 0px;
+    right: 10px;
+}
+
+.editable-click {
+    border-bottom: none !important;
+}
+
+.editable-input, .editable-container.editable-inline, .editableform .control-group {
+    width: 100% !important;
+}
+
+.link-undo, .link-undo span {
+    display: none;
+}
+
+li.deleted a, li.deleted .link-action span {
+    display: none;
+}
+
+.badge {
+    background-color: #CCC;
+}
+
+#todo-list {
+    margin-bottom: 0;
+}
+
+#current-file_link {
+    float: right;
+}
+
+#edit-files {
+    display: none;
+}
+
+#edit-files textarea {
+    border: 0 none;
+    padding: 10px;
+    width: 100%;
+}
+
