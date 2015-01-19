@@ -6,6 +6,7 @@ import numpy
 from matplotlib import pyplot
 
 MIN_CAREA = 700
+#MIN_CAREA = 780
 MAX_CAREA = 2100
 
 IMAGE_SIZE = (1024, 768)
@@ -59,127 +60,60 @@ def alternate(images, original=None):
         else:
             break
 
-def scan_image(filename, export_file=None, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(30, 82), hsize=(20, 62), threshold_limits=(210, 255)):
-#def scan_image(filename, debug=False, verbose=False, doors_open=1, min_carea=MIN_CAREA, wsize=(12, 60), hsize=(12, 60)):
+def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea=MIN_CAREA, wsize=(30, 82), hsize=(20, 62), threshold_limits=(210, 255)):
+#def scan_image(filename, debug=False, verbose=False, min_carea=MIN_CAREA, wsize=(12, 60), hsize=(12, 60)):
 
     nest_index = None
 
     if verbose:
-        print('\nMin contour area: %i, width size: %i, %i, height size: %i, %i' % (min_carea, wsize[0], wsize[1], hsize[0], hsize[1]))
+        print('\nParameters: Min contour area: %i, width size: %i, %i, height size: %i, %i' % (min_carea, wsize[0], wsize[1], hsize[0], hsize[1]))
 
+    def threshold(img, limits=(210, 255)):
+        #_, thresh = cv2.threshold(img, 235, 255, cv2.THRESH_TOZERO)
+        _, thresh = cv2.threshold(img, limits[0], limits[1], cv2.THRESH_TOZERO)
+        return thresh
+
+    def erode(img):
+        x = 8
+        k0 = numpy.ones((x, x), numpy.uint8)
+        return cv2.erode(img, k0, iterations=1)
+
+    def dilate(img):
+        x = 7
+        k0 = numpy.ones((x, x), numpy.uint8)
+        return cv2.dilate(img, k0, iterations=1)
+
+    img_original = cv2.imread(filename)
     while True:
-        img = cv2.imread(filename)
-        out = copy.copy(img)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        out = copy.copy(img_original)
+        img = cv2.cvtColor(img_original, cv2.COLOR_BGR2GRAY)
         #imgray = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
 
+        # Crop image on nest
         img = img[0:IMAGE_SIZE[1] / 2, IMAGE_SUBSTRACT_WIDTH / 2:IMAGE_SIZE[0] - IMAGE_SUBSTRACT_WIDTH / 2]
 
         '''
         #imgray = cv2.medianBlur(imgray, 7)
-
         #cv2.imshow('image', imgray)
         #cv2.waitKey(0)
-
-        #kernel = numpy.ones((200,200),numpy.uint8)
-
-        #erosion = cv2.erode(imgray,kernel,iterations = 1)
-
         #imgSplit = cv2.split(im)
-
-        #ret,thresh = cv2.threshold(img,127,255,cv2.THRESH_TOZERO_INV)
-        #ret,thresh = cv2.threshold(imgray,127,255,1)
-        #ret,thresh = cv2.threshold(imgray,1,50,cv2.THRESH_TOZERO)
-        #ret,thresh = cv2.threshold(imgSplit[1],100,100,cv2.THRESH_TOZERO)
-
-        k0 = numpy.ones((13, 13), numpy.uint8)
-        #k0 = numpy.ones((5, 5), numpy.uint8)
-        k1 = numpy.ones((12, 12), numpy.uint8)
-        #k1 = numpy.ones((5, 5), numpy.uint8)
-        #i1 = cv2.dilate(imgray, kernel, iterations = 1)
-
-        #kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
-        #i2 = cv2.dilate(imgray, kernel, iterations = 1)
-
-        #alternate([ i1, i2 ], img)
-
-        eroded = cv2.erode(imgray, kernel, iterations = 1)
-        dilated = cv2.dilate(imgray, kernel, iterations = 1)
-
-        eroded_dilated = cv2.dilate(eroded, kernel, iterations = 1)
-
         opened = cv2.morphologyEx(imgray, cv2.MORPH_OPEN, kernel)
-
-        alternate([ imgray, eroded, dilated, eroded_dilated, opened ], img)
-        return 0
         '''
 
         #alternate([ cv2.erode(imgray, k0, iterations=1), imgray ])
 
-        '''
-        doors_open = False
-
-        if doors_open:
-            # Porte de droite ouverte:
-            ret, thresh = cv2.threshold(imgray, 100, 100, cv2.THRESH_TOZERO)
-        else:
-            # 2 portes ouvertes:
-            #ret, thresh = cv2.threshold(imgray, 80, 200, cv2.THRESH_TOZERO_INV)
-            ret, thresh = cv2.threshold(imgray, 80, 90, cv2.THRESH_TOZERO_INV)
-            if verbose:
-                print('Highlight actived !')
-        '''
-
-        def threshold(img, limits=(210, 255)):
-            #_, thresh = cv2.threshold(img, 235, 255, cv2.THRESH_TOZERO)
-            _, thresh = cv2.threshold(img, limits[0], limits[1], cv2.THRESH_TOZERO)
-            return thresh
-
-        def erode(img):
-            x = 8
-            k0 = numpy.ones((x, x), numpy.uint8)
-            return cv2.erode(img, k0, iterations=1)
-
-        def dilate(img):
-            x = 7
-            k0 = numpy.ones((x, x), numpy.uint8)
-            return cv2.dilate(img, k0, iterations=1)
-
         
-        '''
-        imgray = cv2.erode(imgray, k0, iterations=1)
-        imgray = cv2.dilate(imgray, k1, iterations=1)
-        '''
-
         img = threshold(img, threshold_limits)
+        #img = threshold(img, (230, 255))
 
         img = erode(img)
         img = dilate(img)
 
+        #cv2.imwrite('debug.jpg', img)
+        #return 0, None
 
-        thresh = img
-
-        #_, thresh = cv2.threshold(imgray, 210, 255, cv2.THRESH_TOZERO)
-
-        #ret, thresh = cv2.threshold(imgray, 10, 100, cv2.THRESH_TOZERO_INV)
-
-        #ret,thresh = cv2.threshold(imgray,150,250,cv2.THRESH_)
-
-        #element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(30,30))
-
-
-        # Otsu's thresholding after Gaussian filtering
-        #blur = cv2.GaussianBlur(imgray,(5,5),0)
-        #ret3,thresh = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-
-        #print 'Image gray'
-        #if verbose:
-        #    #cv2.imshow('image', thresh)
-        #    cv2.imshow('image', imgray)
-        #    cv2.waitKey(0)
-
-        #out = img
-        #out = thresh
+        if debug:
+            cv2.imwrite('debug.jpg', img)
 
         egg_count = 0
         index = 0
@@ -193,14 +127,20 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, doors_ope
         method = cv2.CHAIN_APPROX_SIMPLE
         #method = cv2.CHAIN_APPROX_TC89_L1
         #method = cv2.CHAIN_APPROX_TC89_KCOS
-        contours, h = cv2.findContours(thresh, mode, method)
+        contours, h = cv2.findContours(img, mode, method)
 
         #print('contour:', len(contours))
-        if len(contours) > 15: #04
-            #print('risque de foirage !')
+        contour_limit = 15
+        approx_poly_length = (5, 21)
+
+        #contour_limit = 18
+        if len(contours) > contour_limit: #04
+            if debug:
+                print('Contour length (%i) > limit (%i), thresholds: %s' % (len(contours), contour_limit, str(threshold_limits)))
             mint, maxt = threshold_limits
             mint += 10
-            if mint >= 250:
+            #mint += 4
+            if mint >= 255:
                 break
 
             threshold_limits = (mint, maxt)
@@ -209,12 +149,13 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, doors_ope
         for cnt in contours:
             approx = cv2.approxPolyDP(cnt, 0.01 * cv2.arcLength(cnt, True), True)
             
-            if not (5 < len(approx) < 21):
+            if not (approx_poly_length[0] < len(approx) < approx_poly_length[1]):
+                if verbose:
+                    print("[Skip] Approx poly length (%i) not in range (%s) !" % (len(approx), str(approx_poly_length)))
                 continue
 
             ellipse =  cv2.fitEllipse(cnt)
-            h = ellipse[1][0]
-            w = ellipse[1][1]
+            h, w = ellipse[1][0], ellipse[1][1]
 
             #if abs(h-w) < 2:
             #   print 'paf'
@@ -224,30 +165,46 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, doors_ope
             #print "circle"
             #if 1 < h < 100 and 1 < w < 100:
             #if 20 < h < 100 and 20 < w < 100:
-            if not (hsize[0] < h < hsize[1] and wsize[0] < w < wsize[1]):
+            #wsize = (30, 117);
+            if not (wsize[0] <= w <= wsize[1] and hsize[0] <= h <= hsize[1]):
                 if verbose:
-                    print('Size not in range (w:%i, h:%i, range -> w:%i-%i, h:%i-%i)' % (w, h, wsize[0], wsize[1], hsize[0], hsize[1]))
+                    print('[Skip] Size (%i, %i) not in range (w:%i-%i, h:%i-%i))' % (w, h, wsize[0], wsize[1], hsize[0], hsize[1]))
                 continue
+
+            # Potentiel egg area
+            import math
+            ellipse_area = math.pi * w * h
+            #if not (2000 < ellipse_area < 6000):
+            #    #if verbose:
+            #    print('[Skip] Ellipse area (%i) not in range (%i-%i) !' % (ellipse_area, 0, 0))
+            #    continue
 
             #if len(approx) != 16:
             #    continue
             #print len(approx)
             #print cnt
-            x,y,w,h = cv2.boundingRect(cnt)
+            x, y, w, h = cv2.boundingRect(cnt)
 
-            adist = cv2.arcLength(cnt, True)
+            adist = cv2.arcLength(cnt, closed=True)
+            #print(adist)
+            #if adist > 300:
+            #    continue
+ 
             carea = cv2.contourArea(cnt)
-            #if verbose:
-            #    print('Egg:%i, len approx: %i, height: %i, width: %i, aDist:%i, contour area:%i' % (index, len(approx), h, w, adist, carea), end=' ')
+
+            #print(carea, ellipse_area)
 
             #index += 1
+            #MAX_CAREA = 2900
             if not (MIN_CAREA < carea < MAX_CAREA):
                 if verbose:
-                    print('Contour area (%i) not in range (min:%i) !' % (carea, min_carea))
+                    print('[Skip] Contour area (%i) not in range (%i-%i) !' % (carea, MIN_CAREA, MAX_CAREA))
                 continue
 
             if verbose:
                 print('[found]')
+
+                print('Egg index:%i, len approx: %i (limit: %s), height: %i, width: %i, aDist:%i, contour area:%i' % (index, len(approx), str((5, 21)), h, w, adist, carea))
 
             def drawInfo(out, x, y, x_offset):
 
@@ -273,14 +230,10 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, doors_ope
 
             egg_count += 1
 
-
-            #else:
-                #cv2.drawContours(img,[cnt],0,(0,255,255),-1)
-
         if debug:
             #cv2.imshow('im',imgray)
 
-            alternate([ imgray, out, thresh ], img)
+            alternate([ img, out, img_original ], img)
 
             cv2.destroyAllWindows()
 
@@ -318,13 +271,13 @@ if __name__ == '__main__':
         if args['--test-threshold']:
             test_threshold(filename)
         else:
-            m = re.search('([0-9]+)_([0-9]+)_*((?:[-a-z0-9]*).*)\.jpg', filename)
+            m = re.search('([0-9]+)_([0-9]+)_*((?:[-a-z0-9]*).*)\.(jpg|png)', filename)
             if not m:
                 continue
 
             total += 1
 
-            index, count, flags = m.groups()
+            index, count, flags, _ = m.groups()
 
             count = int(count)
 
@@ -346,18 +299,13 @@ if __name__ == '__main__':
 
             carea = int(args['--contour-area']) if args['--contour-area'] else MIN_CAREA
 
-            #if 'highlight' in flags:
-            #    egg_count = scan_image(filename, doors_open=2, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
-            #else:
-            #    egg_count = scan_image(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
-            '''
-            for threshold_limits in ( (210, 255), (235, 255) ):
-                egg_count = scan_image(filename, threshold_limits=threshold_limits, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
-                if egg_count:
-                    break
-            '''
-
-            egg_count, nest_index = scan_image(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+            if False:
+                for threshold_limits in ( (210, 255), (235, 255) ):
+                    egg_count, nest_index = scan_image(filename, threshold_limits=threshold_limits, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
+                    if egg_count:
+                        break
+            else:
+                egg_count, nest_index = scan_image(filename, debug=args['--debug'], verbose=args['--verbose'], min_carea=carea)
 
             if egg_count != count:
                 if egg_count > count:
@@ -365,10 +313,10 @@ if __name__ == '__main__':
                 else:
                     missed += count - egg_count
 
-                if args['--verbose']:
-                    print('[Error] %i egg(s) found !' % (egg_count))
-                else:
-                    print('[Error]')
+                #if args['--verbose']:
+                print('[Error] %i egg(s) found !' % (egg_count))
+                #else:
+                #    print('[Error]')
             else:
                 if nest_index and nest_index != nest:
                     badnest += 1
@@ -376,7 +324,7 @@ if __name__ == '__main__':
                 else:
                     print('[Ok]')
 
-                good += 1
+                    good += 1
 
     print("Result: %i%% (%i/%i)" % (round(100 / (float(total) / float(good)) if good > 0 else 0), good, total))
     
