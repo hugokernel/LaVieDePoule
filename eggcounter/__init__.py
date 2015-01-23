@@ -60,6 +60,144 @@ def alternate(images, original=None):
         else:
             break
 
+"""
+def threshold(img, limits=(210, 255)):
+    #_, thresh = cv2.threshold(img, 235, 255, cv2.THRESH_TOZERO)
+    _, thresh = cv2.threshold(img, limits[0], limits[1], cv2.THRESH_TOZERO)
+    return thresh
+
+def erode(img):
+    x = 8
+    k0 = numpy.ones((x, x), numpy.uint8)
+    return cv2.erode(img, k0, iterations=1)
+
+def dilate(img):
+    x = 7
+    k0 = numpy.ones((x, x), numpy.uint8)
+    return cv2.dilate(img, k0, iterations=1)
+
+def scan_nest(img, egg_size_coeff=1, debug=False, verbose=False):
+
+    mode = cv2.RETR_LIST                # RETR_EXTERNAL, RETR_CCOMP, RETR_TREE
+    method = cv2.CHAIN_APPROX_SIMPLE    # CHAIN_APPROX_NONE, CHAIN_APPROX_TC89_L1, CHAIN_APPROX_TC89_KCOS
+
+    contours, h = cv2.findContours(img, mode, method)
+
+    contour_limit = 15
+    approx_poly_length = (5, 21)
+
+    if len(contours) > contour_limit:
+        if debug:
+            print('Contour length (%i) > limit (%i), thresholds: %s' % (len(contours), contour_limit, str(threshold_limits)))
+        return None
+
+    eggs = []
+    for cnt in contours:
+        #approx = cv2.approxPolyDP(cnt, 0.01 * cv2.arcLength(cnt, True), True)
+        #if not (approx_poly_length[0] < len(approx) < approx_poly_length[1]):
+        #    if verbose:
+        #        print("[Skip] Approx poly length (%i) not in range (%s) !" % (len(approx), str(approx_poly_length)))
+        #    break
+
+        print(len(cnt))
+        if len(cnt) < 5:
+            continue
+
+        #ellipse =  cv2.fitEllipse(cnt)
+        #h, w = ellipse[1][0], ellipse[1][1]
+        #print(w, h)
+        #if not (wsize[0] <= w <= wsize[1] and hsize[0] <= h <= hsize[1]):
+        #    if verbose:
+        #        print('[Skip] Size (%i, %i) not in range (w:%i-%i, h:%i-%i))' % (w, h, wsize[0], wsize[1], hsize[0], hsize[1]))
+        #    break
+
+        # Potentiel egg area
+        #import math
+        #ellipse_area = math.pi * w * h
+
+        cv2.imwrite('debug.jpg', img)
+
+        x, y, w, h = cv2.boundingRect(cnt)
+        print(w, h)
+
+        adist = cv2.arcLength(cnt, closed=True)
+
+        carea = cv2.contourArea(cnt)
+
+        #print(carea, ellipse_area)
+
+        #index += 1
+        #MAX_CAREA = 2900
+        #if not (MIN_CAREA < carea < MAX_CAREA):
+        #    if verbose:
+        #        print('[Skip] Contour area (%i) not in range (%i-%i) !' % (carea, MIN_CAREA, MAX_CAREA))
+        #    break
+
+        #if verbose:
+        #    print('[found]')
+        #    print('Egg index:%i, len approx: %i (limit: %s), height: %i, width: %i, aDist:%i, contour area:%i' % (index, len(approx), str((5, 21)), h, w, adist, carea))
+
+        eggs.append((x, y, w, h))
+
+    return eggs
+
+def drawInfo(out, x, y, w, h, x_offset, egg_count=0):
+
+    x += x_offset
+
+    # Write on image
+    cv2.putText(out, str(egg_count), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 0))
+    #img = cv2.line(img,(0,0),(511,511),(255,0,0),5)
+
+    #cv2.drawContours(out,[cnt+(x_offset, 0)],0,(255,255,0),-1)
+    cv2.rectangle(out, (x, y),(x + w, y + h), (0, 0, 255), 1)
+
+    coordinates = x + w / 2, y + h / 2
+
+    # Draw target
+    cv2.line(out, (x + w / 2, y), (x + w / 2, y + h), (0, 0, 255), 1)
+    cv2.line(out,(x, y + h / 2),(x + w, y + h / 2), (0, 0, 255), 1)
+
+def test_image(filename):
+
+    img_original = cv2.imread(filename)
+
+    image_width, image_height = IMAGE_SIZE
+
+    '''
+    Nest position [ y pos start, y pos end, x pos start, x pos end ]
+    '''
+    nest0 = [ 150, 350, 180, image_width / 2 ]
+    nest1 = [ 150, 350, image_width / 2, image_width - 180 ]
+
+    def crop(data, coord):
+        return data[coord[0]:coord[1], coord[2]:coord[3]]
+
+    for nest in (nest0, nest1):
+        img = cv2.cvtColor(img_original, cv2.COLOR_BGR2GRAY)
+        img_cropped = crop(img, nest)
+
+        img = copy.copy(img_cropped)
+        #cv2.imwrite('debug.jpg', img)
+        #import time; time.sleep(2)
+
+        img = threshold(img)
+        img = erode(img)
+        img = dilate(img)
+        out = scan_nest(img, debug=True, verbose=True)
+
+        print(out)
+        for item in out:
+            x, y, w, h = item
+            drawInfo(img_cropped, x, y, w, h, 0)
+            cv2.imwrite('debug.jpg', img_cropped)
+            #break
+
+test_image(sys.argv[1])
+
+sys.exit()
+"""
+
 def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea=MIN_CAREA, wsize=(30, 82), hsize=(20, 62), threshold_limits=(210, 255)):
 #def scan_image(filename, debug=False, verbose=False, min_carea=MIN_CAREA, wsize=(12, 60), hsize=(12, 60)):
 
@@ -102,7 +240,6 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea
 
         #alternate([ cv2.erode(imgray, k0, iterations=1), imgray ])
 
-        
         img = threshold(img, threshold_limits)
         #img = threshold(img, (230, 255))
 
@@ -148,7 +285,7 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea
 
         for cnt in contours:
             approx = cv2.approxPolyDP(cnt, 0.01 * cv2.arcLength(cnt, True), True)
-            
+
             if not (approx_poly_length[0] < len(approx) < approx_poly_length[1]):
                 if verbose:
                     print("[Skip] Approx poly length (%i) not in range (%s) !" % (len(approx), str(approx_poly_length)))
@@ -189,7 +326,7 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea
             #print(adist)
             #if adist > 300:
             #    continue
- 
+
             carea = cv2.contourArea(cnt)
 
             #print(carea, ellipse_area)
@@ -327,7 +464,7 @@ if __name__ == '__main__':
                     good += 1
 
     print("Result: %i%% (%i/%i)" % (round(100 / (float(total) / float(good)) if good > 0 else 0), good, total))
-    
+
     #if args['--verbose']:
     print("- Egg found : %i" % egg_count)
     print("- Extra egg detected : %i" % extra)
