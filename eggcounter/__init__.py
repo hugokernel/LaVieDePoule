@@ -198,7 +198,7 @@ test_image(sys.argv[1])
 sys.exit()
 """
 
-def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea=MIN_CAREA, wsize=(30, 82), hsize=(20, 62), threshold_limits=(210, 255)):
+def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea=MIN_CAREA, wsize=(30, 82), hsize=(20, 62), threshold_limits=(110, 255)):
 #def scan_image(filename, debug=False, verbose=False, min_carea=MIN_CAREA, wsize=(12, 60), hsize=(12, 60)):
 
     nest_index = None
