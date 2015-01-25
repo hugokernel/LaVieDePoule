@@ -222,6 +222,10 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea
         return cv2.dilate(img, k0, iterations=1)
 
     img_original = cv2.imread(filename)
+    if img_original == None:
+        print("File not found !")
+        return 0, None
+
     while True:
         out = copy.copy(img_original)
         img = cv2.cvtColor(img_original, cv2.COLOR_BGR2GRAY)
@@ -267,7 +271,7 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea
         contours, h = cv2.findContours(img, mode, method)
 
         #print('contour:', len(contours))
-        contour_limit = 15
+        contour_limit = 17
         approx_poly_length = (5, 21)
 
         #contour_limit = 18
