@@ -1,8 +1,8 @@
 from __future__ import print_function
 import sys
-import copy
 import cv2
 import numpy
+from copy import copy
 from matplotlib import pyplot
 
 MIN_CAREA = 700
@@ -177,7 +177,7 @@ def test_image(filename):
         img = cv2.cvtColor(img_original, cv2.COLOR_BGR2GRAY)
         img_cropped = crop(img, nest)
 
-        img = copy.copy(img_cropped)
+        img = copy(img_cropped)
         #cv2.imwrite('debug.jpg', img)
         #import time; time.sleep(2)
 
@@ -198,8 +198,22 @@ test_image(sys.argv[1])
 sys.exit()
 """
 
-def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea=MIN_CAREA, wsize=(30, 82), hsize=(20, 62), threshold_limits=(110, 255)):
+'''
+Avec les anciennes images :
+    min_carea=MIN_CAREA,
+    wsize=(30, 82),
+    hsize=(20, 62),
+    threshold_limits=(210, 255)
+'''
+
+def scan_image(filename, normal_file=None, export_file=None, debug=False, verbose=False, min_carea=MIN_CAREA, wsize=(30, 82), hsize=(20, 62), threshold_limits=(110, 255)):
 #def scan_image(filename, debug=False, verbose=False, min_carea=MIN_CAREA, wsize=(12, 60), hsize=(12, 60)):
+    '''
+    Scan une image a la recherche d'oeufs
+    - filename:     Fichier d'entree dans un format lisible par opencv (jpg, png)
+    - normal_file:  C'est le fichier d'entree (jpg, png) sur lequel sera applique les dessins suite a detection
+    - export_file:  Fichier de sortie final
+    '''
 
     nest_index = None
 
@@ -226,8 +240,12 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea
         print("File not found !")
         return 0, None
 
+    if normal_file:
+        out = cv2.imread(normal_file)
+    else:
+        out = copy(img_original)
+
     while True:
-        out = copy.copy(img_original)
         img = cv2.cvtColor(img_original, cv2.COLOR_BGR2GRAY)
         #imgray = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
 
@@ -347,25 +365,32 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea
 
                 print('Egg index:%i, len approx: %i (limit: %s), height: %i, width: %i, aDist:%i, contour area:%i' % (index, len(approx), str((5, 21)), h, w, adist, carea))
 
-            def drawInfo(out, x, y, x_offset):
+            colors = (
+                (0, 0, 255),
+                (255, 0, 0),
+                (0, 255, 0),
+            )
 
-                x += x_offset
+            def drawInfo(image, x, y, w, h, index, margin=0, fill=False, target=False, text_color=(255, 255, 0), graph_color=(0, 0, 255)):
+
+                x -= margin
+                w += margin * 2
+                y -= margin
+                h += margin * 2
 
                 # Write on image
-                cv2.putText(out, str(egg_count), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 0))
-                #img = cv2.line(img,(0,0),(511,511),(255,0,0),5)
+                cv2.putText(image, str(index), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 2, text_color)
+                cv2.rectangle(image, (x, y), (x + w, y + h), graph_color, 1)
 
-                cv2.drawContours(out,[cnt+(x_offset, 0)],0,(255,255,0),-1)
-                cv2.rectangle(out, (x, y),(x + w, y + h), (0, 0, 255), 1)
+                if target:
+                    cv2.line(image, (x + w / 2, y), (x + w / 2, y + h), graph_color, 1)
+                    cv2.line(image,(x, y + h / 2), (x + w, y + h / 2), graph_color, 1)
 
-                coordinates = x + w / 2, y + h / 2
+                if fill:
+                    cv2.drawContours(image, [cnt], 0, graph_color, -1)
 
-                # Draw target
-                cv2.line(out, (x + w / 2, y), (x + w / 2, y + h), (0, 0, 255), 1)
-                cv2.line(out,(x, y + h / 2),(x + w, y + h / 2), (0, 0, 255), 1)
-
-            #drawInfo(out, x, y)
-            drawInfo(out, x, y, IMAGE_SUBSTRACT_WIDTH / 2)
+            cnt = cnt + (IMAGE_SUBSTRACT_WIDTH / 2, 0)
+            drawInfo(out, x + IMAGE_SUBSTRACT_WIDTH / 2, y, w, h, egg_count, margin=10, text_color=colors[egg_count % len(colors)], graph_color=colors[egg_count % len(colors)])
 
             nest_index = 1 if x > ((IMAGE_SIZE[0] - IMAGE_SUBSTRACT_WIDTH) / 2) else 2
 
@@ -381,7 +406,7 @@ def scan_image(filename, export_file=None, debug=False, verbose=False, min_carea
         break
 
     if egg_count and export_file:
-        cv2.imwrite(export_file, out)
+        cv2.imwrite(export_file, output_file)
 
     return egg_count, nest_index
 
