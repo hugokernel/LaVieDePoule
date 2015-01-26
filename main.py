@@ -107,8 +107,23 @@ GPIO.setup(LED, GPIO.OUT)
 GPIO.setup(RELAY, GPIO.OUT)
 
 IR_ON = lambda: GPIO.output(RELAY, False)
+#def IR_ON():
+#    GPIO.output(RELAY, False)
+#    time.sleep(2)
+
 IR_OFF = lambda: GPIO.output(RELAY, True)
 IR_OFF()
+
+'''
+IR_ON()
+time.sleep(5)
+print('start')
+cam = Camera()
+cam.setCallback(IR_ON, IR_OFF)
+cam.takePhoto(filename='/tmp/paf.jpg', low_light=True)
+
+sys.exit()
+'''
 
 class PirActivity():
 
@@ -555,14 +570,26 @@ class Twitter(threading.Thread):
             time.sleep(self.PERIOD)
 
     egg_filename = '/tmp/egg.png'
+    egg_found_filename = '/tmp/egg_found.png'
     @only_one_call_each(hours=1)
     def eggScan(self):
-        print('egg scan')
-        if cam.takePhoto(filename=self.egg_filename):
-            egg_count, egg_index = scan_image(self.egg_filename)
-            logger.debug('Egg found (count:%i, index:%i) !' % (egg_count, egg_index))
+        logger.debug('Start egg scan')
+
+        configuration = {
+            #'framerate':        Fraction(1, 6),
+            #'shutter_speed':    6000000,
+            'shutter_speed':    100000,
+            'exposure_mode':    'off',
+            'ISO':              800
+        }
+
+        if cam.takePhoto(filename=self.egg_filename, configuration=configuration):
+            egg_count, egg_index = scan_image(self.egg_filename, export_file=self.egg_found_filename)
             if egg_count:
+                logger.debug('Egg found (count:%i, index:%i) !' % (egg_count, egg_index or -1))
                 self.eggDetected(egg_count, egg_index)
+            else:
+                logger.debug('No egg found !')
 
     @only_one_call_each(days=1, withposarg=1)
     def eggDetected(self, count, index):
@@ -571,7 +598,7 @@ class Twitter(threading.Thread):
         elif count > 1:
             message = speak(dialog.eggs_detected, count=count)
 
-        self.twitter.update_status_with_media(status=message, media=open(self.egg_filename, 'r'))
+        self.twitter.update_status_with_media(status=message, media=open(self.egg_found_filename, 'r'))
 
 
 '''
@@ -710,6 +737,8 @@ class Events:
     @bouncesleep
     @timer
     def door2_falling(self, channel, times):
+        # Disabled ! (because too many bad detection !)
+        return
         if times[0] > self.min_delay:
             twit(dialog.garden_close, time=get_time(times[0]))
         else:

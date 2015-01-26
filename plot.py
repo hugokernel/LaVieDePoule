@@ -23,7 +23,7 @@ info['temp'] = ('Enceinte',   'red')
 info['1w_1'] = ('Nid 1',      'green')
 info['1w_2'] = ('Nid 2',      'blue')
 info['lux']  = (u'Luminosité', ( 'orange', True ))
-info['pir'] = ('PIR',         'black')
+#info['pir']  = ('PIR',        'black')
 
 def get_data_from_range(days=None):
     '''

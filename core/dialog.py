@@ -126,8 +126,8 @@ eggs_detected = (
     '{0}',
     (
         '%count% oeufs ont été détectés !',
-        'Alerte oeufs !',
-        ('{0}, des oeufs !', (
+        'Alerte: %count% oeufs détectés !',
+        ('{0}, %count% oeufs !', (
             'Chic',
             'Chouette',
             'Super'

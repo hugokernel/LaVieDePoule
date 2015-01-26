@@ -1,6 +1,7 @@
 
 from __future__ import print_function
 from picamera import PiCamera
+from fractions import Fraction
 
 class Camera:
 
@@ -31,18 +32,14 @@ class Camera:
         self.callback_after = callback_after
 
     @include
-    def takePhoto(self, resolution=resolution, low_light=False, filename=photo_file):
+    def takePhoto(self, filename=photo_file, configuration={}):
         with PiCamera() as camera:
-            camera.resolution = resolution
+            for key, val in configuration.items():
+                setattr(camera, key, val)
 
-            if low_light:
-                camera.framerate = Fraction(1, 6)
-                camera.shutter_speed = 6000000
-                #camera.exposure_mode = 'off'
-                camera.ISO = 800
-                # Give the camera a good long time to measure AWB
-                # (you may wish to use fixed AWB instead)
-                time.sleep(10)
+            # Give the camera a good long time to measure AWB
+            # (you may wish to use fixed AWB instead)
+            #time.sleep(10)
 
             camera.capture(filename)
 
