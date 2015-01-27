@@ -32,7 +32,7 @@ class Camera:
         self.callback_after = callback_after
 
     @include
-    def takePhoto(self, filename=photo_file, configuration={}):
+    def takePhoto(self, filename=photo_file, configuration={ 'resolution': resolution }):
         with PiCamera() as camera:
             for key, val in configuration.items():
                 setattr(camera, key, val)

@@ -575,16 +575,20 @@ class Twitter(threading.Thread):
     def eggScan(self):
         logger.debug('Start egg scan')
 
+        normal_file = '/tmp/egg_normal_file.jpg'
+        cam.takePhoto(filename=normal_file)
+
         configuration = {
             #'framerate':        Fraction(1, 6),
             #'shutter_speed':    6000000,
             'shutter_speed':    100000,
             'exposure_mode':    'off',
-            'ISO':              800
+            'ISO':              800,
+            'resolution':       (1024, 768)
         }
 
         if cam.takePhoto(filename=self.egg_filename, configuration=configuration):
-            egg_count, egg_index = scan_image(self.egg_filename, export_file=self.egg_found_filename)
+            egg_count, egg_index = scan_image(self.egg_filename, normal_file=normal_file, export_file=self.egg_found_filename)
             if egg_count:
                 logger.debug('Egg found (count:%i, index:%i) !' % (egg_count, egg_index or -1))
                 self.eggDetected(egg_count, egg_index)
