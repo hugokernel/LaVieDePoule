@@ -1,5 +1,6 @@
 
 from __future__ import print_function
+from contextlib import contextmanager
 from picamera import PiCamera
 from fractions import Fraction
 
@@ -9,13 +10,18 @@ class Camera:
     Little class for abstract picamera functions
     '''
 
-    resolution = (1024, 768)
+    configuration = {
+        'resolution': (1024, 768)
+    }
 
     callback_before = None
     callback_after = None
 
     photo_file = '/tmp/image.jpg'
     video_file = '/tmp/video.jpg'
+
+    def __init__(self, configuration=configuration):
+        self.configuration = configuration
 
     def include(func):
         def wrapper(self, **kwargs):
@@ -31,8 +37,19 @@ class Camera:
         self.callback_before = callback_before
         self.callback_after = callback_after
 
+    @contextmanager
+    def attributes(self, configuration):
+        # Save context
+        old_configuration = self.configuration
+        self.configuration = configuration
+        try:
+            yield
+        finally:
+            self.configuration = old_configuration
+
     @include
-    def takePhoto(self, filename=photo_file, configuration={ 'resolution': resolution }):
+    def takePhoto(self, filename=photo_file, configuration=None):
+        configuration = configuration if configuration else self.configuration
         with PiCamera() as camera:
             for key, val in configuration.items():
                 setattr(camera, key, val)
@@ -46,7 +63,7 @@ class Camera:
         return True
 
     @include
-    def takeVideo(self, duration, resolution=resolution, filename=video_file):
+    def takeVideo(self, duration, resolution=configuration['resolution'], filename=video_file):
         with PiCamera() as camera:
             camera.resolution = resolution
             camera.start_recording(filename)

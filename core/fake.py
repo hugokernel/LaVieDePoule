@@ -15,6 +15,9 @@ class TwythonError(Exception):
 class TwythonRateLimitError(TwythonError):
     pass
 
+class TwythonAuthError(TwythonError):
+    pass
+
 class PiCamera:
 
     resolution = (1024, 768)

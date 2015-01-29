@@ -33,5 +33,12 @@ SensorsTable = sqla.Table('sensors', metadata,
     sqla.Column('date',   sqla.DateTime),
 )
 
+EggsTable = sqla.Table('eggs', metadata,
+    sqla.Column('id',       sqla.Integer, primary_key=True),
+    sqla.Column('x',        sqla.Integer()),
+    sqla.Column('y',        sqla.Integer()),
+    sqla.Column('date',     sqla.DateTime),
+)
+
 metadata.create_all(db)
 

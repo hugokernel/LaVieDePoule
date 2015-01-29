@@ -46,3 +46,8 @@ SERVER_ON = True
 SERVER_HOST = '127.0.0.1'
 SERVER_PORT = 5678
 
+'''
+Directory of egg image detection
+'''
+EGG_IMAGE_DIRECTORY = '/home/pi/eggimage/'
+
