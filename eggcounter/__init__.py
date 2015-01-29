@@ -26,7 +26,7 @@ approx_poly_length = (5, 21)
 erode_kernel = 8
 dilate_kernel = 7
 
-contour_limit = 17
+contour_limits = (0, 17)
 
 def load_config(filename, defaults=globals(), verbose=False):
     conf = ConfigParser()
@@ -40,7 +40,7 @@ def load_config(filename, defaults=globals(), verbose=False):
     configuration = {}
     for section, kind in (('carea_limits', minmax), ('width_limits', minmax),
                     ('height_limits', minmax), ('threshold_limits', minmax),
-                    ('approx_poly_length', minmax),
+                    ('approx_poly_length', minmax), ('contour_limits', minmax),
                     ('erode_kernel', 'value'), ('dilate_kernel', 'value')):
         try:
             if type(kind) == tuple:
@@ -55,7 +55,7 @@ def load_config(filename, defaults=globals(), verbose=False):
 configuration = globals()
 configfile = os.path.dirname(os.path.realpath(__file__)) + '/config.ini'
 if os.path.exists(configfile):
-    configuration = load_config(configfile, verbose=True)
+    configuration = load_config(configfile, verbose=False)
 
 def test_threshold(filename):
     img = cv2.imread(filename)
@@ -105,8 +105,8 @@ def alternate(images, original=None):
         elif chr(key) == 'q':
             break
 
-def scan_image( filename,
-                normal_file=None,
+def scan_image( input_file,
+                support_file=None,
                 export_file=None,
                 debug=False,
                 verbose=False,
@@ -117,27 +117,33 @@ def scan_image( filename,
                 approx_poly_length=approx_poly_length,
                 erode_kernel=erode_kernel,
                 dilate_kernel=dilate_kernel,
-                contour_limit=contour_limit):
+                contour_limits=contour_limits):
     '''
     Scan une image a la recherche d'oeufs
-    - filename:     Fichier d'entree dans un format lisible par opencv (jpg, png)
-    - normal_file:  C'est le fichier d'entree (jpg, png) sur lequel sera applique les dessins suite a detection
-    - export_file:  Fichier de sortie final
+    - input_file   : Fichier d'entree dans un format lisible par opencv (jpg, png)
+    - support_file : C'est le fichier d'entree (jpg, png) sur lequel sera applique les dessins suite a detection
+    - export_file  : Fichier de sortie final
     '''
+
+    eggs_found = []
 
     egg_count = 0
     mark = True
-
-    nest_index = None
 
     if verbose:
         print("""Configuration:
  Contour area limits: %i - %i
  Width limits       : %i - %i
- Height limits      : %i - %i""" % (carea_limits[0], carea_limits[1], width_limits[0], width_limits[1], height_limits[0], height_limits[1]))
+ Height limits      : %i - %i
+ Approx poly length : %i - %i
+ Contour limits     : %i - %i""" % (carea_limits[0], carea_limits[1], width_limits[0], width_limits[1], height_limits[0], height_limits[1], approx_poly_length[0], approx_poly_length[1], contour_limits[0], contour_limits[1]))
+
+    img_original = cv2.imread(input_file)
+    if img_original == None:
+        print("File not found !")
+        return 0, None
 
     def threshold(img, limits=(210, 255)):
-        #_, thresh = cv2.threshold(img, 235, 255, cv2.THRESH_TOZERO)
         _, thresh = cv2.threshold(img, limits[0], limits[1], cv2.THRESH_TOZERO)
         return thresh
 
@@ -149,21 +155,29 @@ def scan_image( filename,
         k0 = numpy.ones((dilate_kernel,) * 2, numpy.uint8)
         return cv2.dilate(img, k0, iterations=1)
 
-    img_original = cv2.imread(filename)
-    if img_original == None:
-        print("File not found !")
-        return 0, None
+    def draw_info(image, x, y, w, h, cnt, index, margin=0, fill=False, target=False, text_color=(255, 255, 0), graph_color=(0, 0, 255)):
 
-    if normal_file:
-        out = cv2.imread(normal_file)
-    else:
-        out = copy(img_original)
+        x -= margin
+        w += margin * 2
+        y -= margin
+        h += margin * 2
 
+        # Write on image
+        cv2.putText(image, str(index), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 2, text_color)
+        cv2.rectangle(image, (x, y), (x + w, y + h), graph_color, 1)
+
+        if target:
+            cv2.line(image, (x + w / 2, y), (x + w / 2, y + h), graph_color, 1)
+            cv2.line(image, (x, y + h / 2), (x + w, y + h / 2), graph_color, 1)
+
+        if fill:
+            cv2.drawContours(image, [cnt], 0, graph_color, -1)
+
+    out = cv2.imread(support_file) if support_file else copy(img_original)
     while True:
         img = cv2.cvtColor(img_original, cv2.COLOR_BGR2GRAY)
-        #imgray = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
 
-        # Crop image on nest
+        # Crop image on nests
         img = img[0:IMAGE_SIZE[1] / 2, IMAGE_SUBSTRACT_WIDTH / 2:IMAGE_SIZE[0] - IMAGE_SUBSTRACT_WIDTH / 2]
 
         if mark:
@@ -192,9 +206,14 @@ def scan_image( filename,
         method = cv2.CHAIN_APPROX_SIMPLE
         contours, h = cv2.findContours(img, mode, method)
 
-        if len(contours) > contour_limit:
+        if contour_limits[0] > len(contours):
             if debug:
-                print('[Skip!] Contour length (%i) > limit (%i), thresholds: %s' % (len(contours), contour_limit, str(threshold_limits)))
+                print('[Skip!] Contour length (%i) not in range !' % (len(contours)))
+            break
+
+        if len(contours) >= contour_limits[1]:
+            if debug:
+                print('[Skip!] Contour length (%i) not in range, try with another thresholds: %s' % (len(contours), str(threshold_limits)))
             mint, maxt = threshold_limits
             mint += 10
             #mint += 4
@@ -249,13 +268,14 @@ def scan_image( filename,
 
             carea = cv2.contourArea(cnt)
 
-            #index += 1
             if not (carea_limits[0] <= carea <= carea_limits[1]):
                 skip('Contour area (%i) not in range !' % (carea))
                 continue
 
+            position = (x + IMAGE_SUBSTRACT_WIDTH / 2 + w / 2, y + h / 2)
+
             if verbose:
-                print('[Found] %02i, len approx: %i, size: %i, %i, aDist:%i, contour area:%i' % (index, len(approx), h, w, adist, carea))
+                print('[Found] %02i, Pos: %s, Size: %i, %i, approx poly length: %i, aDist:%i, contour area:%i' % (index, position, len(approx), h, w, adist, carea))
                 if mark:
                     draw_debug(imgmark)
 
@@ -265,34 +285,13 @@ def scan_image( filename,
                 (0, 255, 0),
             )
 
-            def draw_info(image, x, y, w, h, index, margin=0, fill=False, target=False, text_color=(255, 255, 0), graph_color=(0, 0, 255)):
-
-                x -= margin
-                w += margin * 2
-                y -= margin
-                h += margin * 2
-
-                # Write on image
-                cv2.putText(image, str(index), (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 2, text_color)
-                cv2.rectangle(image, (x, y), (x + w, y + h), graph_color, 1)
-
-                if target:
-                    cv2.line(image, (x + w / 2, y), (x + w / 2, y + h), graph_color, 1)
-                    cv2.line(image,(x, y + h / 2), (x + w, y + h / 2), graph_color, 1)
-
-                if fill:
-                    cv2.drawContours(image, [cnt], 0, graph_color, -1)
-
             cnt = cnt + (IMAGE_SUBSTRACT_WIDTH / 2, 0)
-            draw_info(out, x + IMAGE_SUBSTRACT_WIDTH / 2, y, w, h, egg_count, margin=10, text_color=colors[egg_count % len(colors)], graph_color=colors[egg_count % len(colors)])
+            draw_info(out, x + IMAGE_SUBSTRACT_WIDTH / 2, y, w, h, cnt, egg_count, margin=10, text_color=colors[egg_count % len(colors)], graph_color=colors[egg_count % len(colors)])
 
-            nest_index = 1 if x > ((IMAGE_SIZE[0] - IMAGE_SUBSTRACT_WIDTH) / 2) else 2
-
+            eggs_found.append(position)
             egg_count += 1
 
         if debug:
-            #cv2.imshow('im',imgray)
-
             images = [ imgdebug, out, img_original ]
             if mark:
                 images.insert(0, imgmark)
@@ -306,7 +305,15 @@ def scan_image( filename,
     if egg_count and export_file:
         cv2.imwrite(export_file, out)
 
-    return egg_count, nest_index
+    return eggs_found
+
+def scan_image_with_config_file(config_file, *args, **kwargs):
+    '''
+    Scan image with config file parameter
+    '''
+    conf = load_config(config_file)
+    kwargs.update(conf)
+    return scan_image(*args, **kwargs)
 
 if __name__ == '__main__':
 
@@ -328,18 +335,19 @@ if __name__ == '__main__':
       -c --config=<path>    Import config from file
     """
 
-    #eggcount.py [-vdt] --contour-area=<int> <name>...
-    #--contour-area=<int>    Min contour area
-
     args = docopt(help, version='0.1')
 
-    total = good = extra = missed = badnest = 0
+    total = good = extra = missed = badnest = egg_count = 0
     for filename in args['<name>']:
         if args['--test-threshold']:
             test_threshold(filename)
         else:
             m = re.search('([0-9]+)_([0-9]+)_*((?:[-a-z0-9]*).*)\.(jpg|png)', filename)
             if not m:
+                continue
+
+            if not os.path.exists(os.path.realpath(filename)):
+                print("File not found !")
                 continue
 
             # Load config if exists
@@ -360,51 +368,25 @@ if __name__ == '__main__':
             count = int(count)
 
             if args['--verbose']:
-                print("Open %s, must found %i" % (filename, count), end=' ')
+                print("Open %s, must found %i egg(s)" % (filename, count), end=' ')
             else:
-                print("Open %s" % (filename), end=' ')
+                print("Open %s\t" % (filename), end=' ')
 
             if flags:
                 if flags in ('1', '2'):
-                    nest = int(flags)
+                    nests = [int(flags)]
                 else:
-                    flags = flags.split('-')
+                    nests = [ int(nest) for nest in flags.split(',') ]
                     if args['--verbose']:
-                        print('(flags: ' + ', '.join([ flag for flag in flags ]) + ')', end=' ')
+                        print('(nests: ' + ', '.join([ str(flag) for flag in nests ]) + ')', end=' ')
 
-            if args['--debug']:
+            if args['--debug'] or args['--verbose']:
                 print()
 
-            #carea = int(args['--contour-area']) if args['--contour-area'] else carea_limits[0]
+            #egg_count, nest_index = scan_image(filename, debug=args['--debug'], verbose=args['--verbose'], **configuration)
+            eggs_found = scan_image(filename, debug=args['--debug'], verbose=args['--verbose'], **configuration)
 
-            '''
-            if args['--config']:
-                if args['--debug']:
-                    print('Load config from %s file !' % args['--config'])
-
-                config = __import__(args['--config'])
-                config = getattr(config, args['--config'].split('.')[-1])
-
-                for field in ('carea_limits', 'width_limits', 'height_limits', 'threshold_limits'):
-                    try:
-                        val = getattr(config, field)
-                        if val:
-                            #print('Set %s -> %s' % (field, val))
-                            globals()[field] = val
-                    except AttributeError:
-                        pass
-            '''
-
-            '''
-            if False:
-                for threshold_limits in ( (210, 255), (235, 255) ):
-                    egg_count, nest_index = scan_image(filename, threshold_limits=threshold_limits, debug=args['--debug'], verbose=args['--verbose'])
-                    if egg_count:
-                        break
-            else:
-                #egg_count, nest_index = scan_image(filename, debug=args['--debug'], verbose=args['--verbose'], carea_limits=carea_limits, width_limits=width_limits, height_limits=height_limits, threshold_limits=threshold_limits)
-            '''
-            egg_count, nest_index = scan_image(filename, debug=args['--debug'], verbose=args['--verbose'], **configuration)
+            egg_count = len(eggs_found)
 
             if egg_count != count:
                 if egg_count > count:
@@ -412,24 +394,25 @@ if __name__ == '__main__':
                 else:
                     missed += count - egg_count
 
-                #if args['--verbose']:
                 print('[Error] %i egg(s) found !' % (egg_count))
-                #else:
-                #    print('[Error]')
             else:
-                if nest_index and nest_index != nest:
-                    badnest += 1
+                for x, y in eggs_found:
+                    nest_index = 1 if x >= IMAGE_SIZE[0] else 2
+
+                    if nest_index in nests:
+                        del nests[nests.index(nest_index)]
+                    else:
+                        badnest += 1
+
+                if badnest:
                     print('[Error] Bad nest !')
                 else:
                     print('[Ok]')
-
                     good += 1
 
     print("Result: %i%% (%i/%i)" % (round(100 / (float(total) / float(good)) if good > 0 else 0), good, total))
-
-    #if args['--verbose']:
-    print("- Egg found : %i" % egg_count)
-    print("- Extra egg detected : %i" % extra)
-    print("- Missed egg : %i" % missed)
-    print("- Bad nest : %i" % badnest)
+    print("- Egg found\t\t: %i" % egg_count)
+    print("- Extra egg detected\t: %i" % extra)
+    print("- Missed egg\t\t: %i" % missed)
+    print("- Bad nest\t\t: %i" % badnest)
 
