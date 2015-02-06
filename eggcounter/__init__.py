@@ -275,7 +275,7 @@ def scan_image( input_file,
             position = (x + IMAGE_SUBSTRACT_WIDTH / 2 + w / 2, y + h / 2)
 
             if verbose:
-                print('[Found] %02i, Pos: %s, Size: %i, %i, approx poly length: %i, aDist:%i, contour area:%i' % (index, position, len(approx), h, w, adist, carea))
+                print('[Found] %02i, Pos: %s, Size: %i, %i, approx poly length: %i, aDist:%i, contour area:%i' % (index, position, h, w, len(approx), adist, carea))
                 if mark:
                     draw_debug(imgmark)
 
@@ -397,8 +397,7 @@ if __name__ == '__main__':
                 print('[Error] %i egg(s) found !' % (egg_count))
             else:
                 for x, y in eggs_found:
-                    nest_index = 1 if x >= IMAGE_SIZE[0] else 2
-
+                    nest_index = 1 if x >= IMAGE_SIZE[0] / 2 else 2
                     if nest_index in nests:
                         del nests[nests.index(nest_index)]
                     else:
