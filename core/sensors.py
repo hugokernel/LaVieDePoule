@@ -267,3 +267,29 @@ class Sensors(threading.Thread):
             return func
         return wrapper
 
+    def if_value(self, name, equal=None, greater=None, lower=None):
+        '''Call a function if sensor is equal, lower or greater value
+        Todo: implement maxage parameter
+        '''
+        params = {}
+        for param, compare in (('equal', '__eq__'), ('lower', '__lt__'), ('greater', '__gt__')):
+            params[compare] = locals()[param] if param in locals() else None
+
+        def decorator(func):
+            def wrapper(*args, **kwargs):
+                #nonlocal equal, greater, lower
+                isok = False
+                #for param, compare in ( ('equal', '__eq__'), ('lower', '__lt__'), ('greater', '__gt__') ):
+                #    val = locals()[param]
+                for compare, val in params.items():
+                    if val is None:
+                        continue
+                    isok = getattr(self.getLastValue(name)[name], compare)(val)
+                    if not isok:
+                        break
+                if isok:
+                    return func(*args, **kwargs)
+            return wrapper
+
+        return decorator
+

@@ -10,6 +10,7 @@
 
 from __future__ import print_function
 import sys
+import os
 import time
 import arrow
 import logging
@@ -32,30 +33,30 @@ from lib.kbhit import KBHit
 from lib.RainbowHandler import RainbowLoggingHandler
 from lib.freesms import send_sms
 
-from core.db import TwitterActivityTable, EventsTable, SensorsTable, sqla, db
+from core.db import TwitterActivityTable, EventsTable, SensorsTable, EggsTable, sqla, db
 from core.functions import FifoBuffer, only_one_call_each, get_time
 from core.sensors import Sensors
 from core.speak import speak
 from core import dialog
-from eggcounter import scan_image
 
-from config import general as config, secret
-
-if config.SERVER_ON:
-    from www import start as webstart
+from config import general as config, secret, camera as config_camera
 
 if config.FAKE_MODE:
     from core.fake import (  PiCamera, GPIO,
-                            Twython, TwythonError, TwythonRateLimitError,
+                            Twython, TwythonError, TwythonRateLimitError, TwythonAuthError,
                             onewire_read_temperature, Raspiomix as Raspiomix_Origin,
                             Camera )
 else:
     from lib.raspiomix import Raspiomix as Raspiomix_Origin
     from core.camera import Camera
-    from twython import Twython, TwythonError, TwythonRateLimitError
+    from twython import Twython, TwythonError, TwythonRateLimitError, TwythonAuthError
     from picamera import PiCamera
     import RPi.GPIO as GPIO
     from core.functions import onewire_read_temperature
+    from eggcounter import scan_image_with_config_file
+
+    if config.SERVER_ON:
+        from www import start as webstart
 
 logger = logging.getLogger()
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -124,6 +125,10 @@ cam.takePhoto(filename='/tmp/paf.jpg', low_light=True)
 
 sys.exit()
 '''
+
+def sms(message):
+    logger.debug("Send sms with message : " % message)
+    send_sms(secret.FREESMS_LOGIN, secret.FREESMS_KEY, 'Poulailler: ' + message)
 
 class PirActivity():
 
@@ -264,11 +269,12 @@ def alerts(name, value, validrange):
 
     if config.FAKE_MODE:
         logger.info(message)
-    else:
-        if config.TWITTER_ON:
-            twit(('@%s ' % config.TWITTER_ADMIN_ACCOUNT) + message)
-        send_sms(secret.FREESMS_LOGIN, secret.FREESMS_KEY, 'Poulailler: ' + message)
+        return
 
+    if config.TWITTER_ON:
+        twit(('@%s ' % config.TWITTER_ADMIN_ACCOUNT) + message)
+    
+    sms(message)
 
 sensor.declare('vbatt',      lambda: raspi.readAdc(0) / 0.354,    type=sensor.TYPE_VOLTAGE)
 sensor.declare('current',    lambda: raspi.readAdc(3) * 10 / 6.8, type='current')
@@ -300,6 +306,18 @@ sensor.declare('pir',   pira.get, type='activity')
 
 #sensor.setNotInRangeCallback(lambda name, value, validrange: logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, value, validrange)))
 #sensor.setReadyCallback(detect_increase, '1w_1')
+
+"""
+@sensor.if_value(name='1w_2', lower=12)
+def toto():
+    print('ok!')
+
+sensor.start()
+while True:
+    print(sensor.getLastValue('1w_2'))
+    toto()
+    time.sleep(1)
+"""
 
 '''
 for i in range(0, 20):
@@ -375,18 +393,91 @@ def get_string_from_temperatures(*args):
             string.append('%s%0.1f°C' % (sensor, temp))
     return ', '.join(string)
 
+class Egg:
+
+    image_directory = config.EGG_IMAGE_DIRECTORY
+
+    export_file = '/tmp/egg_found.png'
+
+    resolution = config_camera.default['resolution']
+
+    camera = None
+
+    def __init__(self, camera):
+        self.camera = camera
+
+    def isNew(self, position, tolerance=15):
+        x, y = position
+        c = EggsTable.c
+        query = sqla.select([ c.id, c.x, c.y ]).where(c.date==str(datetime.now())[0:10])
+        for line in db.execute(query).fetchall():
+            if line[1] - tolerance <= x <= line[1] + tolerance and \
+               line[2] - tolerance <= y <= line[2] + tolerance:
+                return False
+        return True
+
+    def getNestFromPosition(self, position):
+        return 1 if position[0] >= self.resolution[0] else 2
+
+    def scan(self, support_file=None, saveindb=True):
+        unknow = []
+        input_file = os.path.join(self.image_directory, str(datetime.now()) + '.png')
+
+        logger.debug('Start egg scan')
+
+        # Capture image
+        self.camera.takePhoto(filename=input_file, configuration=config_camera.egg_detection)
+
+        params = {
+            'input_file':   input_file,
+            'export_file':  self.export_file,
+            'verbose':      False
+        }
+
+        if support_file:
+            params['support_file'] = support_file
+
+        # Now, scan image
+        eggs_found = scan_image_with_config_file('config/egg.ini', **params)
+
+        if len(eggs_found):
+            logger.debug('Egg(s) found (%s) !' % (str(eggs_found)))
+
+            unknow = []
+            for position in eggs_found:
+                if self.isNew(position):
+                    unknow.append(position)
+
+                    # Insert in db
+                    if saveindb:
+                        db.execute(EggsTable.insert().values(
+                            x=position[0],
+                            y=position[1],
+                            date=datetime.now(),
+                        ))
+
+        if len(unknow):
+            logger.debug('New egg(s) found (%s) !' % (str(unknow)))
+            sms("Un nouvel oeuf est là !")
+        else:
+            logger.debug('No egg found !')
+
+        return (len(unknow), [ self.getNestFromPosition(pos) for pos in unknow ])
+
 class Twitter(threading.Thread):
 
     PERIOD = 60 * 4
 
     sources = []
     twitter = None
+    egg = None
 
-    def __init__(self, twitter):
+    def __init__(self, twitter, egg):
         threading.Thread.__init__(self)
         self._stopevent = threading.Event()
 
         self.twitter = twitter
+        self.egg = egg
 
         # Load all response
         s = sqla.select([TwitterActivityTable.c.source_id])
@@ -542,13 +633,32 @@ class Twitter(threading.Thread):
     def report(self):
         twit_report(*get_sensor_data())
 
+    @only_one_call_each(hours=2) #minuts=30)
+    #@sensor.if_value(name='lux', greater=1)
+    def eggScan(self):
+        # Scan egg !
+        support_file = '/tmp/egg_support_file.jpg'
+        cam.takePhoto(filename=support_file)
+
+        egg_count, nests = self.egg.scan(support_file)
+        if egg_count > 0:
+            message, params = (dialog.egg_detected, { 'nest_index': nests }) if egg_count == 1 \
+                else (dialog.eggs_detected, { 'count': egg_count })
+            self.twitter.update_status_with_media(status=speak(message, **params), media=open(self.egg.export_file, 'r'))
+
     def run(self):
 
         while not self._stopevent.isSet():
 
             self.report()
 
-            mentions = self.twitter.get_mentions_timeline()
+            try:
+                mentions = self.twitter.get_mentions_timeline()
+            except TwythonAuthError as e:
+                logger.error(e)
+                time.sleep(60)
+                continue
+
             for mention in mentions:
 
                 # Skip if mention is already processed
@@ -568,61 +678,6 @@ class Twitter(threading.Thread):
             self.eggScan()
 
             time.sleep(self.PERIOD)
-
-    egg_filename = '/tmp/egg.png'
-    egg_found_filename = '/tmp/egg_found.png'
-    @only_one_call_each(hours=1)
-    def eggScan(self):
-        logger.debug('Start egg scan')
-
-        normal_file = '/tmp/egg_normal_file.jpg'
-        cam.takePhoto(filename=normal_file)
-
-        configuration = {
-            #'framerate':        Fraction(1, 6),
-            #'shutter_speed':    6000000,
-            'shutter_speed':    100000,
-            'exposure_mode':    'off',
-            'ISO':              800,
-            'resolution':       (1024, 768)
-        }
-
-        if cam.takePhoto(filename=self.egg_filename, configuration=configuration):
-            egg_count, egg_index = scan_image(self.egg_filename, normal_file=normal_file, export_file=self.egg_found_filename)
-            if egg_count:
-                logger.debug('Egg found (count:%i, index:%i) !' % (egg_count, egg_index or -1))
-                self.eggDetected(egg_count, egg_index)
-            else:
-                logger.debug('No egg found !')
-
-    @only_one_call_each(days=1, withposarg=1)
-    def eggDetected(self, count, index):
-        if count == 1:
-            message = speak(dialog.egg_detected, nest_index=index)
-        elif count > 1:
-            message = speak(dialog.eggs_detected, count=count)
-
-        self.twitter.update_status_with_media(status=message, media=open(self.egg_found_filename, 'r'))
-
-
-'''
-# Get your "home" timeline
-twt.statuses.home_timeline()
-
-# Get a particular friend's timeline
-twt.statuses.user_timeline(screen_name="billybob")
-
-# to pass in GET/POST parameters, such as `count`
-twt.statuses.home_timeline(count=5)
-
-# to pass in the GET/POST parameter `id` you need to use `_id`
-twt.statuses.oembed(_id=1234567890)
-
-# Send a direct message
-twt.direct_messages.new(
-    user="billybob",
-    text="I think yer swell!")
-'''
 
 def twit(message, takephoto=False, **kwargs):
     message = speak(message, **kwargs) if type(message) == tuple else message
@@ -844,7 +899,7 @@ if __name__ == "__main__":
     '''
     Configure misc
     '''
-    cam = Camera()
+    cam = Camera(configuration=config_camera.default)
     cam.setCallback(IR_ON, IR_OFF)
 
     events = Events()
@@ -852,8 +907,11 @@ if __name__ == "__main__":
     if 'webapp' in globals():
         webstart(host=config.WEBSERVER_HOST, port=config.WEBSERVER_PORT)
 
+    # Egg scanner
+    egg = Egg(cam)
+
     if config.TWITTER_ON:
-        tthread = Twitter(twt)
+        tthread = Twitter(twt, egg)
         tthread.start()
 
     help_string = '''La vie de poule
@@ -866,6 +924,7 @@ if __name__ == "__main__":
  d  Get sensor data
  t  Toggle relay
  l  Toggle led
+ e  Run an egg scan
  q  Exit
 '''
 
@@ -922,6 +981,9 @@ Only in fake mode :
             elif c == 'l':
                 GPIO.output(LED, not GPIO.input(LED))
                 logger.info('Toggle led (%s) !' % ('on' if GPIO.input(LED) else 'off'))
+            elif c == 'e':
+                egg_count, nests = egg.scan(saveindb=False)
+                logger.info('Egg found : %i (%s)' % (egg_count, str(nests)))
             elif c == 'v':
                 levels = [ logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL ]
                 index = levels.index(logger.getEffectiveLevel()) + 1
