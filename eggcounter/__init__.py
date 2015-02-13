@@ -209,6 +209,17 @@ def scan_image( input_file,
         if contour_limits[0] > len(contours):
             if debug:
                 print('[Skip!] Contour length (%i) not in range !' % (len(contours)))
+
+            mint, maxt = threshold_limits
+            mint -= 15
+            #mint += 4
+            if mint <= 10:
+                break
+
+            threshold_limits = (mint, maxt)
+            #print(threshold_limits)
+            continue
+
             break
 
         if len(contours) >= contour_limits[1]:
