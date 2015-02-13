@@ -16,7 +16,7 @@ Alert config (min, max)
 '''
 VOLTAGE_ALERT = (10, 12)
 CURRENT_ALERT = (0.3, 0.55)
-TEMP_ALERT = (3, 32)
+TEMP_ALERT = (-2, 32)
 
 '''
 One wire sensor id

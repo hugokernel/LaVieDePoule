@@ -1,7 +1,11 @@
 
 default = {
     'resolution':       (1024, 768),
-    'exposure_mode':    'spotlight'
+    #'exposure_mode':    'spotlight'
+}
+
+video = {
+    'resolution': (640, 480),
 }
 
 egg_detection = {

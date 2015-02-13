@@ -10,24 +10,29 @@ class Camera:
     Little class for abstract picamera functions
     '''
 
-    configuration = {
+    photo_configuration = {
         'resolution': (1024, 768)
+    }
+
+    video_configuration = {
+        'resolution': (640, 480)
     }
 
     callback_before = None
     callback_after = None
 
     photo_file = '/tmp/image.jpg'
-    video_file = '/tmp/video.jpg'
+    video_file = '/tmp/video.h264'
 
-    def __init__(self, configuration=configuration):
-        self.configuration = configuration
+    def __init__(self, photo_configuration=photo_configuration, video_configuration=video_configuration):
+        self.photo_configuration = photo_configuration
+        self.video_configuration = video_configuration
 
     def include(func):
-        def wrapper(self, **kwargs):
+        def wrapper(self, *args, **kwargs):
             if self.callback_before:
                 self.callback_before()
-            status = func(self, **kwargs)
+            status = func(self, *args, **kwargs)
             if self.callback_after:
                 self.callback_after()
             return status
@@ -38,18 +43,22 @@ class Camera:
         self.callback_after = callback_after
 
     @contextmanager
-    def attributes(self, configuration):
+    def attributes(self, photo_configuration, video_configuration):
         # Save context
-        old_configuration = self.configuration
-        self.configuration = configuration
+        old_photo_configuration = self.photo_configuration
+        self.photo_configuration = photo_configuration
+
+        old_video_configuration = self.video_configuration
+        self.video_configuration = video_configuration
         try:
             yield
         finally:
-            self.configuration = old_configuration
+            self.photo_configuration = old_photo_configuration
+            self.video_configuration = old_video_configuration
 
     @include
     def takePhoto(self, filename=photo_file, configuration=None):
-        configuration = configuration if configuration else self.configuration
+        configuration = configuration if configuration else self.photo_configuration
         with PiCamera() as camera:
             for key, val in configuration.items():
                 setattr(camera, key, val)
@@ -63,9 +72,11 @@ class Camera:
         return True
 
     @include
-    def takeVideo(self, duration, resolution=configuration['resolution'], filename=video_file):
+    def takeVideo(self, duration, filename=video_file, configuration=None):
+        configuration = configuration if configuration else self.video_configuration
         with PiCamera() as camera:
-            camera.resolution = resolution
+            for key, val in configuration.items():
+                setattr(camera, key, val)
             camera.start_recording(filename)
             camera.wait_recording(duration)
             camera.stop_recording()
