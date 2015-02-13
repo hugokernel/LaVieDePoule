@@ -1,5 +1,4 @@
 # -*- coding: utf8 -*-
-
 import sys
 import datetime
 import calendar
@@ -18,11 +17,15 @@ from core.db import SensorsTable, sqla, db
 EXPORT_FILE = '/tmp/plot.png'
 
 info = OrderedDict()
+
 info['1w_0'] = (u'Extérieur',  'violet')
 info['temp'] = ('Enceinte',   'red')
 info['1w_1'] = ('Nid 1',      'green')
 info['1w_2'] = ('Nid 2',      'blue')
-info['lux']  = (u'Luminosité', ( 'orange', True ))
+
+#info = {}
+#info['lux']  = (u'Luminosité', 'orange')
+#info['lux']  = (u'Luminosité', ( 'orange', True ))
 #info['pir']  = ('PIR',        'black')
 
 def get_data_from_range(days=None):
