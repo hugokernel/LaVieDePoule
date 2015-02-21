@@ -35,8 +35,9 @@ SensorsTable = sqla.Table('sensors', metadata,
 
 EggsTable = sqla.Table('eggs', metadata,
     sqla.Column('id',       sqla.Integer, primary_key=True),
-    sqla.Column('x',        sqla.Integer()),
-    sqla.Column('y',        sqla.Integer()),
+    sqla.Column('x',        sqla.Integer),
+    sqla.Column('y',        sqla.Integer),
+    sqla.Column('is_valid', sqla.Boolean, default=True),
     sqla.Column('date',     sqla.DateTime),
 )
 

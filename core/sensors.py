@@ -1,8 +1,31 @@
 
+import sys
 import time
 import threading
 from contextlib import contextmanager
 import collections
+
+class FifoBuffer:
+    
+    default = None
+    data = []
+
+    def __init__(self, data=default, size=-1):
+        self.data = data if data else [ self.default ] * size
+
+    def isFull(self):
+        for val in self.data:
+            if val == self.default:
+                return False
+        return True
+
+    def append(self, x):
+        self.data.pop(0)
+        self.data.append(x)
+
+    def read(self):
+        for data in self.data:
+            yield data
 
 class Sensors(threading.Thread):
 
@@ -41,9 +64,7 @@ class Sensors(threading.Thread):
         self._stopevent.set()
 
     def declare(self, name, callback, params=None, type=None, validrange=None):
-        '''
-        Declare a sensor and his associated callback
-        '''
+        """Declare a sensor and his associated callback"""
         self.sensors[name] = (callback, params, validrange if validrange else self.default_validrange, type if type else self.default_type)
         self.results[name] = (None, None)
 
@@ -57,13 +78,13 @@ class Sensors(threading.Thread):
         return (None, None) if withtimestamp else None
 
     def getLastValue(self, name=None, maxage=0, withtimestamp=False):
-        '''
-        Get last value read
+        """Get last value read from sensor
+
         Multiple format for name parameter :
         - name is str : Get value with name 'name'
         - name is list or tuple : Get all values with name in list/tuple
         - name is None : Get all values
-        '''
+        """
         if name and type(name) not in (list, tuple):
             name = (name, )
 
@@ -73,38 +94,32 @@ class Sensors(threading.Thread):
         return out
 
     def setReadyCallback(self, callback, name=None):
-        '''
-        Callback called when data on channel read !
-        '''
+        """Callback called when data on channel read !"""
         if name not in self.callbacks_ready:
             self.callbacks_ready[name] = []
 
         self.callbacks_ready[name].append(callback)
 
     def setThresholdCallback(self, limits, callback, name=None):
-        '''
-        Callback called when data on channel read !
+        """Callback called when data on channel read !
         Value not in limits are saved !
-        '''
+        """
         if name not in self.callbacks_threshold:
             self.callbacks_threshold[name] = []
 
         self.callbacks_threshold[name].append((limits, callback))
 
     def setNotInRangeCallback(self, callback, name=None):
-        '''
-        Callback called when data not in range !
+        """Callback called when data not in range !
         Not in range value are NOT saved !
-        '''
+        """
         if name not in self.callbacks_notinrange:
             self.callbacks_notinrange[name] = []
 
         self.callbacks_notinrange[name].append(callback)
 
     def isSensorsReady(self, sensors=[]):
-        '''
-        Return if sensors is ready
-        '''
+        """Return if sensors is ready"""
         ready = True
         for sensor in sensors if sensors else self.sensors:
             if not sensor in self.results:
@@ -118,9 +133,7 @@ class Sensors(threading.Thread):
         return ready
 
     def waitForSensorsReady(self, sensors):
-        '''
-        Wait for sensors is ready
-        '''
+        """Wait for sensors is ready"""
         while not self.isSensorsReady(sensors):
             time.sleep(1)
 
@@ -194,56 +207,59 @@ class Sensors(threading.Thread):
     Decorators
     '''
 
-    def changedetect(self, name, unit_per_minut=0.01, measure_count=5, min_period=0):
-        '''
-        unit_per_minut: How many unit value grow (or decrease if negative) per minut
-        measure_count: Count of successfully grow measures
-        min_period: Minimum period
-        '''
+    def changedetect(self, name, speed=0.01, measure_count=5, min_period=0):
+        """Detect sensor value variation
+
+        - speed: Speed of variation (in minut), negative value for decrease detection
+        - measure_count: Count of successfully grow measures
+        - min_period: Minimum period before first test
+
+        For example:
+
+            @changedetect('temperature', speed=1):
+            def warn(name, value):
+                print("Temperature increase detected (1deg by minut) !")
+        """
 
         names = name if type(name) in (list, tuple) else (name,)
 
-        compare = '__gt__' if unit_per_minut > 0 else '__lt__'
+        speed_min, speed_max = speed if type(speed) in (tuple, list) else (speed, sys.maxsize)
+
+        assert(speed_min < speed_max)
+
+        compare = '__gt__' if speed_min > 0 else '__lt__'
         def decorator(func):
-            def wrapper(name, value, values=[None] * measure_count, last_time=type('X', (object,), { 'value': None })):
+            fifo = {}
+            def wrapper(name, value, last_time=type('X', (object,), { 'value': None })):
 
                 if min_period and last_time.value and last_time.value + min_period > time.time():
                     return
 
                 last_time.value = time.time()
 
-                from core.functions import FifoBuffer
                 '''
                 Detect change of value
                 '''
-                fifo = FifoBuffer(data=values)
-                fifo.append(value)
-
-                #print(name, fifo.data)
-
-                coeff = unit_per_minut / self.period
-
-                # Detect if change
-                if fifo.isFull():
-                    last = 0
-                    change = False
-                    for i in range(len(values)):
-                        if last:
-                            change = getattr(values[i], compare)(last)
-
-                            if not change:
+                fifo[name].append(value)
+                
+                # Fifo full, start change detection !
+                if fifo[name].isFull():
+                    last = None
+                    for x in fifo[name].read():
+                        if last is not None:
+                            if not getattr(float(x), compare)(last):
                                 break
 
-                            #print('change: %s, name: %s, coeff: %s' % (change, name, coeff), coeff, type(coeff))
-                            if unit_per_minut and unit_per_minut > abs((values[i] - last) * coeff):
-                                change = False
+                            val = abs((x - last) / self.period * 60)
+                            if speed_min > val or val > speed_max:
                                 break
-                        last = values[i]
 
-                    if change:
+                        last = x
+                    else:
                         return func(name, value)
 
-            for item in names:
+            for name in names:
+                fifo[name] = FifoBuffer(size=measure_count)
                 self.setReadyCallback(wrapper, name)
 
             return wrapper
@@ -292,4 +308,50 @@ class Sensors(threading.Thread):
             return wrapper
 
         return decorator
+
+if __name__ == '__main__':
+    sensor = Sensors(1)
+
+    class Grow(threading.Thread):
+
+        __value = 0
+
+        def __init__(self):
+            threading.Thread.__init__(self)
+            self._stopevent = threading.Event()
+
+        def stop(self):
+            self._stopevent.set()
+
+        def run(self):
+            while not self._stopevent.isSet():
+                self.__value += 0.005
+                time.sleep(1)
+
+        def value(self):
+            return self.__value
+
+    g = Grow()
+    g.start()
+
+    sensor.declare('grow', g.value)
+    sensor.declare('grow2', lambda: 2)
+
+    #@sensor.changedetect(name='grow', speed=(120, 133))
+    #@sensor.changedetect(name='grow', speed=120)
+    @sensor.changedetect(name=('grow', 'grow2'), speed=0.29)
+    def detect_change(name, value):
+        print('Change + detected !!!!!!!!!!!!')
+
+    sensor.start()
+
+    i = 0
+    while True:
+        try:
+            a = sensor.getLastValue('grow')
+            print('Grow value : ', a)
+            time.sleep(3)
+        except KeyboardInterrupt:
+            g.stop(); sensor.stop()
+            import sys; sys.exit()
 

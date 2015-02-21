@@ -109,6 +109,19 @@ enclosure_close_light = (
     )
 )
 
+egglay_detected = (
+    '{0}',
+    (
+        (5, 'Poule qui pond dans le nid %nest_index% !'),
+        (5, 'Poule en train de pondre dans le nid %nest_index% !'),
+        (1, 'Poule prise en flagrant délit de ponte dans le nid %nest_index% !'),
+        (6, 'Ponte {0} dans le nid %nest_index% !', (
+            'détectée',
+            'en cours',
+        ))
+    )
+)
+
 egg_detected = (
     '{0}',
     (
@@ -132,6 +145,13 @@ eggs_detected = (
             'Chouette',
             'Super'
         )),
+    )
+)
+
+live_video = (
+    '{0}',
+    (
+        'En direct du poulailler !',
     )
 )
 

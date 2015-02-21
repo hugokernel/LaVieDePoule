@@ -14,9 +14,7 @@ import os
 import time
 import arrow
 import logging
-import curses
 import re
-from fractions import Fraction
 import threading
 from datetime import datetime
 
@@ -34,7 +32,7 @@ from lib.RainbowHandler import RainbowLoggingHandler
 from lib.freesms import send_sms
 
 from core.db import TwitterActivityTable, EventsTable, SensorsTable, EggsTable, sqla, db
-from core.functions import FifoBuffer, only_one_call_each, get_time
+from core.functions import only_one_call_each, get_time
 from core.sensors import Sensors
 from core.speak import speak
 from core import dialog
@@ -107,12 +105,8 @@ GPIO.setup(PIR, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 GPIO.setup(LED, GPIO.OUT)
 GPIO.setup(RELAY, GPIO.OUT)
 
-IR_ON = lambda: GPIO.output(RELAY, False)
-#def IR_ON():
-#    GPIO.output(RELAY, False)
-#    time.sleep(2)
-
-IR_OFF = lambda: GPIO.output(RELAY, True)
+IR_ON   = lambda: GPIO.output(RELAY, False)
+IR_OFF  = lambda: GPIO.output(RELAY, True)
 IR_OFF()
 
 '''
@@ -127,7 +121,7 @@ sys.exit()
 '''
 
 def sms(message):
-    logger.debug("Send sms with message : " % message)
+    logger.debug("Send sms with message : %s" % message)
     send_sms(secret.FREESMS_LOGIN, secret.FREESMS_KEY, 'Poulailler: ' + message)
 
 class PirActivity():
@@ -189,6 +183,8 @@ def get_maxima(name):
     return (_min, _max)
 
 class Maxmin:
+    '''Detect maxim temperature
+    '''
 
     sensor_name = '1w_0'
 
@@ -204,7 +200,7 @@ class Maxmin:
             Maxmin.minima_detected = None
 
     @staticmethod
-    @sensor.changedetect(name=sensor_name, unit_per_minut=-0.01)
+    @sensor.changedetect(name=sensor_name, speed=-0.01)
     def detect_decrease(name, value):
         if Maxmin.maxima_detected is not None:
             _, _max = get_maxima(name)
@@ -235,23 +231,45 @@ def savetodb(name, value):
 def notinrange(name, value, validrange):
     logger.error("%s sensor not in valid range (%d, range: %s) !" % (name, value, validrange))
 
+'''
 @sensor.threshold((0, 4), 'pir')
 def detect_activity(name, value, threshold):
     logger.info('Activity detected (%s) !' % value)
     logger.info('Lux: %s' % sensor.getLastValue('lux'))
+'''
 
-#UNIT_PER_MINUT=0.01
-#UNIT_PER_MINUT=0.13 # ~1deg / 7min
-UNIT_PER_MINUT=0.05 # ~1deg / 7min
-MEASURE_COUNT=3
-MIN_PERIOD=60
-@sensor.changedetect(name=('1w_1', '1w_2'), unit_per_minut=UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
-def detect_increase(name, value):
-    logger.info('Increase detected (%s) !' % name)
+class Nest:
+    '''Detect hen in nest !
+    '''
 
-@sensor.changedetect(name=('1w_1', '1w_2'), unit_per_minut=-UNIT_PER_MINUT, measure_count=MEASURE_COUNT, min_period=MIN_PERIOD)
-def detect_decrease(name, value):
-    logger.info('Decrease detected (%s) !' % name)
+    names = ('1w_1', '1w_2')
+    increase = {}
+    for name in names:
+        increase[name] = None
+
+    @staticmethod
+    @sensor.changedetect(name=names, speed=0.3)
+    def detectIncrease(name, value):
+        logger.info('Increase detected (%s) !' % name)
+
+        if Nest.increase[name] is not None:
+            if not Nest.increase[name]:
+                twit(dialog.egglay_detected, takephoto=True, nest_index=name[-1])
+
+        Nest.increase[name] = True
+
+    @staticmethod
+    @sensor.changedetect(name=names, speed=-0.2)
+    def detectDecrease(name, value):
+        logger.info('Decrease detected (%s) !' % name)
+
+        if Nest.increase[name] is not None:
+            if Nest.increase[name]:
+                logger.warn('Poule sorti du nid %i !' % int(name[-1]))
+
+                tthread.eggScan(onlynest=int(name[-1]))
+
+        Nest.increase[name] = False
 
 @sensor.threshold(config.TEMP_ALERT,    'temp')
 @sensor.threshold(config.VOLTAGE_ALERT, 'vbatt')
@@ -276,9 +294,15 @@ def alerts(name, value, validrange):
     
     sms(message)
 
+def adc_read_average(io, times=5):
+    value = 0.0
+    for i in range(times):
+        value += raspi.readAdc(io)
+    return value / i
+
 sensor.declare('vbatt',      lambda: raspi.readAdc(0) / 0.354,    type=sensor.TYPE_VOLTAGE)
 sensor.declare('current',    lambda: raspi.readAdc(3) * 10 / 6.8, type='current')
-sensor.declare('lux',        lambda: raspi.readAdc(1),            type='luminosity')
+sensor.declare('lux',        lambda: adc_read_average(1),         type='luminosity')
 
 with sensor.attributes(type='switch'):
     sensor.declare('door0',      lambda: GPIO.input(SWITCH0))
@@ -327,41 +351,6 @@ for i in range(0, 20):
     detect_increase(i)
 '''
 
-"""
-while True:
-    print(sensor.getLastValue())
-    time.sleep(1)
-
-i = 0
-while True:
-    #print(sensor.get('toto'))
-    #print(sensor.getLastValue('1w_0', maxage))
-
-    #print(sensor.getLastValue('1w_0', maxage=3, withtimestamp=True))
-    #print(sensor.getLastValue(('1w_0', '1w_1', '1w_2'), maxage=3))
-    #print(sensor.getLastValue(maxage=3))
-
-    if i > 3:
-        #vbatt, lux, temp, current = analog[0] / 0.354, analog[1], analog[2] * 100, analog[3] * 10 / 6.8
-        #temp1, temp2, temp3 = onewire_read_temperature(config.ONEWIRE_SENSORS)
-
-        values = sensor.getLastValue(('vbatt', 'lux', 'temp', 'current'), maxage=config.MAX_AGE)
-        vbatt, lux, temp = values['vbatt'], values['lux'], values['temp']
-        print(vbatt, lux, temp)
-
-    '''
-    if i > 5:
-        val = sensor.getLastValue('1w_0', maxage=2)
-        print('Value:', val, ', timestamp: ', time.time())
-
-        vals = sensor.getLastValue(maxage=2)
-        print(vals)
-    '''
-
-    time.sleep(0.5)
-    i += 1
-"""
-
 
 def get_status_door(door):
 
@@ -383,7 +372,7 @@ def get_string_from_lux(lux):
         string = dialog.lux_map[1]
     elif 2.6 < lux < 5:
         string = dialog.lux_map[2]
-    return '%0.1f%s' % (lux, (' (' + string + ')' if string else ''))
+    return '%0.3f%s' % (lux, (' (' + string + ')' if string else ''))
 
 def get_string_from_temperatures(*args):
     string = []
@@ -419,7 +408,12 @@ class Egg:
     def getNestFromPosition(self, position):
         return 1 if position[0] >= self.resolution[0] else 2
 
-    def scan(self, support_file=None, saveindb=True):
+    def scan(self, support_file=None, saveindb=True, onlynest=None):
+        """Scan for eggs
+        - support_file  : File use to draw egg detection
+        - saveindb      : Save in db egg detected
+        - onlynest      : Scan only in this nest
+        """
         unknow = []
         input_file = os.path.join(self.image_directory, str(datetime.now()) + '.png')
 
@@ -445,6 +439,10 @@ class Egg:
 
             unknow = []
             for position in eggs_found:
+
+                if onlynest and self.getNestFromPosition(position) != onlynest:
+                    continue
+
                 if self.isNew(position):
                     unknow.append(position)
 
@@ -629,20 +627,20 @@ class Twitter(threading.Thread):
 
         return status
 
-    @only_one_call_each(hours=3, startin=60 * 60 * 3)
+    @only_one_call_each(hours=6, startin=60 * 60 * 6)
     def report(self):
         twit_report(*get_sensor_data())
 
     @only_one_call_each(hours=2) #minuts=30)
-    #@sensor.if_value(name='lux', greater=1)
-    def eggScan(self):
+    @sensor.if_value(name='lux', greater=1)
+    def eggScan(self, onlynest=None):
         # Scan egg !
         support_file = '/tmp/egg_support_file.jpg'
         cam.takePhoto(filename=support_file)
 
-        egg_count, nests = self.egg.scan(support_file)
+        egg_count, nests = self.egg.scan(support_file, onlynest=onlynest)
         if egg_count > 0:
-            message, params = (dialog.egg_detected, { 'nest_index': nests }) if egg_count == 1 \
+            message, params = (dialog.egg_detected, { 'nest_index': nests[0] }) if egg_count == 1 \
                 else (dialog.eggs_detected, { 'count': egg_count })
             self.twitter.update_status_with_media(status=speak(message, **params), media=open(self.egg.export_file, 'r'))
 
@@ -679,16 +677,19 @@ class Twitter(threading.Thread):
 
             time.sleep(self.PERIOD)
 
-def twit(message, takephoto=False, **kwargs):
+def twit(message, takephoto=False, takevideo=False, videolength=10, **kwargs):
     message = speak(message, **kwargs) if type(message) == tuple else message
 
-    logger.info('Twit: %s' % message)
+    logger.info('Twit: %s (takephoto: %i, takevideo: %i)' % (message, takephoto, takevideo))
 
     if config.TWITTER_ON:
         try:
             if takephoto:
                 if cam.takePhoto():
                     twt.update_status_with_media(status=message, media=open(cam.photo_file, 'r'))
+            elif takevideo:
+                if cam.takeVideo(videolength):
+                    twt.update_status_with_media(status=message, media=open(cam.video_file, 'r'))
             else:
                 twt.update_status(status=message)
         except TwythonError as e:
@@ -899,7 +900,7 @@ if __name__ == "__main__":
     '''
     Configure misc
     '''
-    cam = Camera(configuration=config_camera.default)
+    cam = Camera(photo_configuration=config_camera.default, video_configuration=config_camera.video)
     cam.setCallback(IR_ON, IR_OFF)
 
     events = Events()
@@ -918,13 +919,16 @@ if __name__ == "__main__":
 
  ?  This help
  c  Reload config
- p  Capture image and send to Twitter
- r  Send report to Twitter
  v  Modify verbosity
  d  Get sensor data
  t  Toggle relay
  l  Toggle led
  e  Run an egg scan
+
+ Twitter related :
+ R  Send report
+ P  Capture image and send it
+
  q  Exit
 '''
 
@@ -968,11 +972,13 @@ Only in fake mode :
 
                 # Dump config
                 print('\n'.join([ '%s: %s' % (name, getattr(config, name)) for name in dir(config) if name[0:2] != '__' ]))
-            elif c == 'p':
+            elif c == 'P':
                 twit('Cheese !', takephoto=True)
-            elif c == 'r':
+            elif c == 'R':
                 sensors_data = get_sensor_data()
                 twit_report(*sensors_data, takephoto=False)
+            #elif c == 'V':
+            #    twit(dialog.live_video, takevideo=True)
             elif c == 'd':
                 get_sensor_data()
             elif c == 't':
