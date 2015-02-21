@@ -10,6 +10,9 @@ from ConfigParser import ConfigParser, NoSectionError
 IMAGE_SIZE = (1024, 768)
 IMAGE_SUBSTRACT_WIDTH = 200
 
+# Zone
+zone_limits = (0, 0, 0, 0)
+
 # Contour area
 carea_limits = (700, 2100)
 
@@ -37,11 +40,14 @@ def load_config(filename, defaults=globals(), verbose=False):
 
     # Load min/max
     minmax = ('min', 'max')
+    minmax4 = ('xmin', 'xmax', 'ymin', 'ymax')
     configuration = {}
-    for section, kind in (('carea_limits', minmax), ('width_limits', minmax),
-                    ('height_limits', minmax), ('threshold_limits', minmax),
-                    ('approx_poly_length', minmax), ('contour_limits', minmax),
-                    ('erode_kernel', 'value'), ('dilate_kernel', 'value')):
+    for section, kind in (
+        ('zone_limits', minmax4),
+        ('carea_limits', minmax), ('width_limits', minmax),
+        ('height_limits', minmax), ('threshold_limits', minmax),
+        ('approx_poly_length', minmax), ('contour_limits', minmax),
+        ('erode_kernel', 'value'), ('dilate_kernel', 'value')):
         try:
             if type(kind) == tuple:
                 configuration[section] = [ int(conf.get(section, val)) for val in kind ]
@@ -117,7 +123,8 @@ def scan_image( input_file,
                 approx_poly_length=approx_poly_length,
                 erode_kernel=erode_kernel,
                 dilate_kernel=dilate_kernel,
-                contour_limits=contour_limits):
+                contour_limits=contour_limits,
+                zone_limits=zone_limits):
     '''
     Scan une image a la recherche d'oeufs
     - input_file   : Fichier d'entree dans un format lisible par opencv (jpg, png)
@@ -156,6 +163,9 @@ def scan_image( input_file,
         return cv2.dilate(img, k0, iterations=1)
 
     def draw_info(image, x, y, w, h, cnt, index, margin=0, fill=False, target=False, text_color=(255, 255, 0), graph_color=(0, 0, 255)):
+
+        # Detection zone
+        cv2.rectangle(image, (zone_limits[0], zone_limits[2]), (zone_limits[1], zone_limits[3]), (255, 255, 0), 1)
 
         x -= margin
         w += margin * 2
@@ -254,6 +264,12 @@ def scan_image( input_file,
 
             approx = cv2.approxPolyDP(cnt, 0.01 * cv2.arcLength(cnt, True), True)
             x, y, w, h = cv2.boundingRect(cnt)
+
+            #_x, _y, _width, _heigth = (zone_limits[0], zone_limits[2]), (zone_limits[1], zone_limits[3])
+            _xmin, _xmax, _ymin, _ymax = zone_limits
+            if not _xmin < x + IMAGE_SUBSTRACT_WIDTH < _xmax or not _ymin < y < _ymax:
+                skip("Not in nest zone !")
+                continue
 
             if not (approx_poly_length[0] <= len(approx) <= approx_poly_length[1]):
                 skip("Approx poly length (%i) not in range !" % len(approx))
