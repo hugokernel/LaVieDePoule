@@ -57,3 +57,4 @@ credentials.py
 config/secret.py
 .log
 image.jpg
+var/*

@@ -153,6 +153,7 @@ class Raspiomix:
         return '20%02d-%02d-%02dT%02d:%02d:%02d' % (data[6], data[5], data[4], data[2], data[1], data[0])
 
 class Camera:
+    def __init__(self, photo_configuration=None, video_configuration=None): pass
     def setCallback(self, callback_before=None, callback_after=None): pass
     def takePhoto(self, resolution=None): pass
     def takeVideo(self, resolution=None): pass

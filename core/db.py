@@ -1,7 +1,7 @@
 
 import sqlalchemy as sqla
 
-db = sqla.create_engine('sqlite:///data.sqlite')
+db = sqla.create_engine('sqlite:///var/data.sqlite')
 db.echo = False
 
 metadata = sqla.MetaData()

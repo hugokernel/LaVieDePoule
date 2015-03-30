@@ -22,7 +22,7 @@ try:
     reload
 
     # Python 2.x related problem with utf-8
-    reload(sys)  
+    reload(sys)
     sys.setdefaultencoding('utf8')
 except NameError:
     from importlib import reload
@@ -63,7 +63,7 @@ rainbowHandler = RainbowLoggingHandler(sys.stdout)
 rainbowHandler.setFormatter(formatter)
 logger.addHandler(rainbowHandler)
 
-fileHandler = logging.FileHandler('laviedepoule.log')
+fileHandler = logging.FileHandler('var/laviedepoule.log')
 fileHandler.setFormatter(formatter)
 logger.addHandler(fileHandler)
 
@@ -291,7 +291,7 @@ def alerts(name, value, validrange):
 
     if config.TWITTER_ON:
         twit(('@%s ' % config.TWITTER_ADMIN_ACCOUNT) + message)
-    
+
     sms(message)
 
 def adc_read_average(io, times=5):
@@ -307,7 +307,7 @@ sensor.declare('lux',        lambda: adc_read_average(1),         type='luminosi
 with sensor.attributes(type='switch'):
     sensor.declare('door0',      lambda: GPIO.input(SWITCH0))
     sensor.declare('door1',      lambda: GPIO.input(SWITCH1))
-    sensor.declare('door2',      lambda: GPIO.input(SWITCH2))
+    #sensor.declare('door2',      lambda: GPIO.input(SWITCH2))
 
 TEMP_VALID_RANGE = (-30, 50)
 def read_onewire(address, maxretry=5, validrange=TEMP_VALID_RANGE):
@@ -372,7 +372,7 @@ def get_string_from_lux(lux):
         string = dialog.lux_map[1]
     elif 2.6 < lux < 5:
         string = dialog.lux_map[2]
-    return '%0.3f%s' % (lux, (' (' + string + ')' if string else ''))
+    return '%0.1f%s' % (lux, (' (' + string + ')' if string else ''))
 
 def get_string_from_temperatures(*args):
     string = []
@@ -398,7 +398,7 @@ class Egg:
     def isNew(self, position, tolerance=15):
         x, y = position
         c = EggsTable.c
-        query = sqla.select([ c.id, c.x, c.y ]).where(c.date==str(datetime.now())[0:10])
+        query = sqla.select([ c.id, c.x, c.y ]).where(sqla.sql.func.substr(c.date, 1, 10)==str(datetime.now())[0:10])
         for line in db.execute(query).fetchall():
             if line[1] - tolerance <= x <= line[1] + tolerance and \
                line[2] - tolerance <= y <= line[2] + tolerance:
@@ -452,6 +452,7 @@ class Egg:
                             x=position[0],
                             y=position[1],
                             date=datetime.now(),
+                            is_valid=False
                         ))
 
         if len(unknow):
@@ -859,7 +860,7 @@ def get_sensor_data():
     temp1, temp2, temp3 = values['1w_0'], values['1w_1'], values['1w_2']
 
     logger.debug("Vin: %0.2fV, A: %0.2fA, lux: %s, Temperatures -> %s, Portes -> %s, %s, %s" % \
-        (vbatt, current, get_string_from_lux(lux), get_string_from_temperatures(temp, temp1, temp2, temp3), get_status_door(0), get_status_door(1), get_status_door(2)))
+        (vbatt, current, lux, get_string_from_temperatures(temp, temp1, temp2, temp3), get_status_door(0), get_status_door(1), get_status_door(2)))
 
     return (vbatt, lux, temp, current, temp1, temp2, temp3)
 
@@ -924,6 +925,7 @@ if __name__ == "__main__":
  t  Toggle relay
  l  Toggle led
  e  Run an egg scan
+ s  Toggle status of last egg scan
 
  Twitter related :
  R  Send report
@@ -997,6 +999,15 @@ Only in fake mode :
                     index = 0
                 logger.setLevel(levels[index])
                 print('Set level to %s !' % (logging.getLevelName(levels[index])))
+            elif c == 's':
+                c = EggsTable.c
+                query = sqla.select([c.id, c.date, c.is_valid]).order_by(c.date.desc())
+                _id, _date, _is_valid = db.execute(query).fetchone()
+
+                query = EggsTable.update().values(is_valid=not _is_valid).where(c.id==_id)
+                db.execute(query)
+
+                print('Toggle egg detected last entry (id:%i, date:%s) to is_valid:%s' % (_id, _date, not _is_valid))
 
             if config.FAKE_MODE:
                 if c in inputs:
