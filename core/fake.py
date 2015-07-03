@@ -131,6 +131,11 @@ class Raspiomix:
     IO2 = 13
     IO3 = 15
 
+    IO4 = 17
+    IO5 = 18
+    IO6 = 19
+    IO7 = 20
+
     DIP0 = 7
     DIP1 = 16
 

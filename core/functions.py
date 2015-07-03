@@ -27,6 +27,18 @@ def speak(data):
     return data[0].format(*out)
 """
 
+class Atomic:
+    locked = False
+
+    def __enter__(self):
+        while Atomic.locked:
+            print('Locked ! (%i)' % id(self))
+            time.sleep(0.5)
+        Atomic.locked = True
+
+    def __exit__(self, *_):
+        Atomic.locked = False
+
 def elapsed_time(seconds, suffixes=['y','w','d','h','m','s'], add_s=False, separator=' '):
     """
     Takes an amount of seconds and turns it into a human-readable amount of time.

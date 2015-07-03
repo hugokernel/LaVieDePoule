@@ -13,6 +13,15 @@ stats_yesterday = "Stats d'hier (%s) #statsjour"
 stats_lastweek = "Stats de la semaine passée (semaine %s) #statssemaine"
 stats_lastmonth = "Stats du mois passée (%s) #statsmois"
 
+stats_vbatt_yesterday = (
+    'Hier, {0}',
+    (
+        "le poulailler à été alimenté par énergie solaire pendant %total% !",
+        "le panneau solaire à alimenté le poulailler pendant %total% !",
+        "nous avons été autonome en énergie pendant %total% !"
+    )
+)
+
 cot = (
     '@%username% {0}',
     (

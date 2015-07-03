@@ -16,7 +16,7 @@ import arrow
 import logging
 import re
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 
 try:
     reload
@@ -32,7 +32,7 @@ from lib.RainbowHandler import RainbowLoggingHandler
 from lib.freesms import send_sms
 
 from core.db import TwitterActivityTable, EventsTable, SensorsTable, EggsTable, sqla, db
-from core.functions import only_one_call_each, get_time
+from core.functions import only_one_call_each, get_time, Atomic
 from core.sensors import Sensors
 from core.speak import speak
 from core import dialog
@@ -42,10 +42,10 @@ from config import general as config, secret, camera as config_camera
 if config.FAKE_MODE:
     from core.fake import (  PiCamera, GPIO,
                             Twython, TwythonError, TwythonRateLimitError, TwythonAuthError,
-                            onewire_read_temperature, Raspiomix as Raspiomix_Origin,
+                            onewire_read_temperature, Raspiomix,
                             Camera )
 else:
-    from lib.raspiomix import Raspiomix as Raspiomix_Origin
+    from lib.raspiomix import Raspiomix
     from core.camera import Camera
     from twython import Twython, TwythonError, TwythonRateLimitError, TwythonAuthError
     from picamera import PiCamera
@@ -69,44 +69,48 @@ logger.addHandler(fileHandler)
 
 logger.setLevel(logging.DEBUG)
 
+logging.getLogger('oauthlib').setLevel(logging.WARNING)
+logging.getLogger('requests.packages.urllib3.connectionpool').setLevel(logging.WARNING)
+
+raspi = Raspiomix()
+
 '''
 Configure GPIO
 '''
-class Raspiomix(Raspiomix_Origin):
-    IO4 = 7
-    IO5 = 16
-
-GPIOS = [
-    Raspiomix.IO0,
-    Raspiomix.IO1,
-    Raspiomix.IO2,
-    Raspiomix.IO3,
-]
-
 SWITCH0 = Raspiomix.IO0
 SWITCH1 = Raspiomix.IO1
 SWITCH2 = Raspiomix.IO3
 
 PIR = Raspiomix.IO2
 
-RELAY = Raspiomix.IO4
+RELAY_IR = Raspiomix.IO4
 LED = Raspiomix.IO5
 
-raspi = Raspiomix()
+RELAY_ALIM_FORCE = Raspiomix.IO6
+RELAY_ALIM_STATE = Raspiomix.IO7
 
 GPIO.setmode(GPIO.BOARD)
 GPIO.setwarnings(False)
 
-for index in GPIOS:
+for index in [ SWITCH0, SWITCH1, SWITCH2, PIR ]:
     GPIO.setup(index, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 GPIO.setup(PIR, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 GPIO.setup(LED, GPIO.OUT)
-GPIO.setup(RELAY, GPIO.OUT)
+GPIO.setup(RELAY_IR, GPIO.OUT)
+GPIO.setup(RELAY_ALIM_FORCE, GPIO.OUT)
+GPIO.setup(RELAY_ALIM_STATE, GPIO.IN)
 
-IR_ON   = lambda: GPIO.output(RELAY, False)
-IR_OFF  = lambda: GPIO.output(RELAY, True)
+ALIM_VIN    = lambda: GPIO.output(RELAY_ALIM_FORCE, False)
+ALIM_VBATT  = lambda: GPIO.output(RELAY_ALIM_FORCE, True)
+ALIM_VIN()
+
+ALIM_IS_VBATT = lambda: GPIO.input(RELAY_ALIM_STATE)
+ALIM_IS_VIN = lambda: not GPIO.input(RELAY_ALIM_STATE)
+
+IR_ON   = lambda: GPIO.output(RELAY_IR, False)
+IR_OFF  = lambda: GPIO.output(RELAY_IR, True)
 IR_OFF()
 
 '''
@@ -220,12 +224,21 @@ class Maxmin:
 @only_one_call_each(seconds=config.SAVE_TO_DB_EVERY, withposarg=0)
 def savetodb(name, value):
     _, _, _, type = sensor.sensors[name]
-    db.execute(SensorsTable.insert().values(
-        type=type,
-        name=name,
-        value=value,
-        date=datetime.now(),
-    ))
+    while True:
+        try:
+            with Atomic():
+                with db.connect() as connection:
+                    connection.execute(SensorsTable.insert().values(
+                        type=type,
+                        name=name,
+                        value=value,
+                        date=datetime.now(),
+                    ))
+
+            break
+        except sqla.exc.OperationalError:
+            logger.error("OperationalError exception catched (savetodb) ! Retry in 1 second...")
+            time.sleep(1)
 
 @sensor.notinrange()
 def notinrange(name, value, validrange):
@@ -267,18 +280,48 @@ class Nest:
             if Nest.increase[name]:
                 logger.warn('Poule sorti du nid %i !' % int(name[-1]))
 
-                tthread.eggScan(onlynest=int(name[-1]))
+                if config.SCAN_FOR_EGG:
+                    tthread.eggScan(onlynest=int(name[-1]))
 
         Nest.increase[name] = False
 
+VALID_PAN_VOLTAGE = (9, 12)
+
+@sensor.threshold(config.VALID_BATT_VOLTAGE, 'vbatt')
+@only_one_call_each(minuts=15)
+def switch_alim_event(name, value, validrange, sendsms=False):
+    _min, _max = validrange
+
+    if value < _min and ALIM_IS_VBATT(): #and getvpan() < VALID_PAN_VOLTAGE[0]:
+        if sendsms:
+            sms("Switch to vin (vbatt: %0.2fV) !" % value)
+        ALIM_VIN()
+    elif value > _max and ALIM_IS_VIN():
+        if sendsms:
+            sms("Switch to vbatt (vbatt: %0.2fV) !" % value)
+        ALIM_VBATT()
+
+'''
+Bad idea !
+@sensor.threshold(VALID_PAN_VOLTAGE, 'vpan')
+@only_one_call_each(minuts=15)
+def switch_alim_vpan(name, value, validrange, sendsms=True):
+    _min, _max = validrange
+
+    if value > _max and ALIM_IS_VIN():
+        if sendsms:
+            sms("Switch to vbatt (vpan %0.2fV > %0.2fV) !" % (value, _max))
+        ALIM_VBATT()
+'''
+
 @sensor.threshold(config.TEMP_ALERT,    'temp')
-@sensor.threshold(config.VOLTAGE_ALERT, 'vbatt')
+@sensor.threshold(config.VOLTAGE_ALERT, 'vin')
 @sensor.threshold(config.CURRENT_ALERT, 'current')
 @only_one_call_each(hours=12, withposarg=0)
 def alerts(name, value, validrange):
 
     messages = {
-        'vbatt':    'Vbatt voltage (%0.2fV) not in range (thresholds: %s) !',
+        'vin':      'Vin voltage (%0.2fV) not in range (thresholds: %s) !',
         'current':  'Current (%0.2fA) not in range (thresholds: %s) !',
         'temp':     'Main temperature (%i°C) not in range (thresholds: %s) !'
     }
@@ -300,9 +343,41 @@ def adc_read_average(io, times=5):
         value += raspi.readAdc(io)
     return value / i
 
-sensor.declare('vbatt',      lambda: raspi.readAdc(0) / 0.354,    type=sensor.TYPE_VOLTAGE)
-sensor.declare('current',    lambda: raspi.readAdc(3) * 10 / 6.8, type='current')
-sensor.declare('lux',        lambda: adc_read_average(1),         type='luminosity')
+VDIVIDE = lambda r1, r2: r2 / (r1 + r2)
+
+'''
+ - Vin   : From 220V adapter
+ - Vbatt : From 12V battery
+ - Vout  : Selection (Vin or Vbatt)
+ - Vsol  : Voltage from solar panel
+'''
+
+# R divisor : R1 = 1.8KΩ (1792Ω), R2 = 1KΩ (996Ω)
+getvin = lambda: raspi.readAdc(1) / VDIVIDE(1792.0, 996.0) * 1.1545
+
+# R divisor : R1 = 4.7KΩ (4650Ω), R2 = 1KΩ (934Ω)
+getvbatt = lambda: raspi.readAdc(0) / VDIVIDE(4599.0, 989.0) * 1.058
+
+# R divisor : R1 = 4.7KΩ (4625Ω), R2 = 1KΩ (992Ω)
+getvpan = lambda: raspi.readAdc(6) / VDIVIDE(4625.0, 992.0) * 1.0547
+
+# R divisor : R1 = 4.7KΩ (4640Ω), R2 = 1KΩ (992Ω)
+getvout = lambda: raspi.readAdc(7) / VDIVIDE(4640.0, 992.0) * 1.0547
+
+getcurrent = lambda: raspi.readAdc(3) / 1.422 # * 10 / 6.8
+getlux = lambda: adc_read_average(4)
+
+getvsource = lambda: 'vin' if ALIM_IS_VIN() else 'vbatt'
+
+sensor.declare('vin',       getvin,     type=sensor.TYPE_VOLTAGE)
+sensor.declare('vbatt',     getvbatt,   type=sensor.TYPE_VOLTAGE)
+sensor.declare('vpan',      getvpan,    type=sensor.TYPE_VOLTAGE)
+sensor.declare('vout',      getvout,    type=sensor.TYPE_VOLTAGE)
+
+sensor.declare('current',   getcurrent, type='current')
+sensor.declare('lux',       getlux,     type='luminosity')
+
+sensor.declare('vsource',    getvsource)
 
 with sensor.attributes(type='switch'):
     sensor.declare('door0',      lambda: GPIO.input(SWITCH0))
@@ -372,6 +447,8 @@ def get_string_from_lux(lux):
         string = dialog.lux_map[1]
     elif 2.6 < lux < 5:
         string = dialog.lux_map[2]
+    elif lux is None:
+        string = '?'
     return '%0.1f%s' % (lux, (' (' + string + ')' if string else ''))
 
 def get_string_from_temperatures(*args):
@@ -448,12 +525,14 @@ class Egg:
 
                     # Insert in db
                     if saveindb:
-                        db.execute(EggsTable.insert().values(
-                            x=position[0],
-                            y=position[1],
-                            date=datetime.now(),
-                            is_valid=False
-                        ))
+                        with Atomic():
+                            with db.connect() as connection:
+                                connection.execute(EggsTable.insert().values(
+                                    x=position[0],
+                                    y=position[1],
+                                    date=datetime.now(),
+                                    is_valid=False
+                                ))
 
         if len(unknow):
             logger.debug('New egg(s) found (%s) !' % (str(unknow)))
@@ -490,16 +569,18 @@ class Twitter(threading.Thread):
 
         str2dtime = lambda date: datetime.strptime(date, '%a %b %d %H:%M:%S +0000 %Y')
 
-        db.execute(TwitterActivityTable.insert().values(
-            source_id=mention['id_str'],
-            source_reply_id=mention['in_reply_to_status_id'],
-            source_user_name=mention['user']['screen_name'],
-            source_content=mention['text'],
-            source_date=str2dtime(mention['created_at']),
-            reply_id=response['id_str'],
-            reply_content=response['text'],
-            reply_date=str2dtime(response['created_at']),
-        ))
+        with Atomic():
+            with db.connect() as connection:
+                connection.execute(TwitterActivityTable.insert().values(
+                    source_id=mention['id_str'],
+                    source_reply_id=mention['in_reply_to_status_id'],
+                    source_user_name=mention['user']['screen_name'],
+                    source_content=mention['text'],
+                    source_date=str2dtime(mention['created_at']),
+                    reply_id=response['id_str'],
+                    reply_content=response['text'],
+                    reply_date=str2dtime(response['created_at']),
+                ))
 
         self.sources.append(int(mention['id_str']))
 
@@ -540,8 +621,8 @@ class Twitter(threading.Thread):
             Get data from all or from some sensors
             '''
             if not args:
-                vbatt, lux, temp, current, temp1, temp2, temp3 = get_sensor_data()
-                return dialog.report % (get_string_from_temperatures(temp, temp1, temp2, temp3), get_string_from_lux(lux), vbatt, current), None
+                vin, vbatt, lux, temp, current, temp1, temp2, temp3 = get_sensor_data()
+                return dialog.report % (get_string_from_temperatures(temp, temp1, temp2, temp3), get_string_from_lux(lux), vin, current), None
             else:
                 nargs = []
                 for arg in args:
@@ -674,7 +755,8 @@ class Twitter(threading.Thread):
                     self.response(mention, speak(dialog.cot, username=mention['user']['screen_name']))
                     continue
 
-            self.eggScan()
+            if config.SCAN_FOR_EGG:
+                self.eggScan()
 
             time.sleep(self.PERIOD)
 
@@ -704,10 +786,11 @@ class Events:
     min_delay = 60 * 60
 
     inputs = {
-       SWITCH0: 'switch0',
-       SWITCH1: 'switch1',
-       SWITCH2: 'switch2',
-       PIR:     'pir'
+       SWITCH0:             'switch0',
+       SWITCH1:             'switch1',
+       SWITCH2:             'switch2',
+       PIR:                 'pir',
+       RELAY_ALIM_STATE:    'alimentation'
     }
 
     def __init__(self):
@@ -716,6 +799,8 @@ class Events:
         GPIO.add_event_detect(SWITCH2, GPIO.BOTH, callback=self.wrapper, bouncetime=self.bouncetime)
 
         GPIO.add_event_detect(PIR, GPIO.FALLING, callback=self.pir)#, bouncetime=self.bouncetime)
+
+        GPIO.add_event_detect(RELAY_ALIM_STATE, GPIO.BOTH, callback=self.alimentation, bouncetime=self.bouncetime)
 
     def bouncesleep(func):
         def wrapper(*args, **kwargs):
@@ -747,13 +832,19 @@ class Events:
         return wrapper
 
     def saveLog(self, channel):
-        ins = EventsTable.insert().values(
-            input=self.inputs[channel],
-            type='rising' if GPIO.input(channel) else 'falling',
-            date=datetime.now(),
-        )
-
-        db.execute(ins)
+        while True:
+            try:
+                with Atomic():
+                    with db.connect() as connection:
+                        connection.execute(EventsTable.insert().values(
+                            input=self.inputs[channel],
+                            type='rising' if GPIO.input(channel) else 'falling',
+                            date=datetime.now(),
+                        ))
+                break
+            except sqla.exc.OperationalError:
+                logger.error("OperationalError exception catched (saveLog) ! Retry in 1 second...")
+                time.sleep(1)
 
     def log(func):
         def wrapper(self, channel):
@@ -762,7 +853,12 @@ class Events:
         return wrapper
 
     @log
+    def alimentation(self, channel):
+        logger.debug("Alimentation switched !")
+        logger.debug("Power source (relay alim state) : %s" % ('Vin' if ALIM_IS_VIN() else 'Vbatt'))
+
     @bouncesleep
+    @log
     @timer
     def door0_falling(self, channel, times):
         if times[0] > self.min_delay:
@@ -770,8 +866,8 @@ class Events:
         else:
             twit(dialog.collect_egg_light)
 
-    @log
     @bouncesleep
+    @log
     @timer
     def door0_rising(self, channel, times):
         logger.debug("Collecteur oeuf ferme ! (%s)", get_time(times[1]))
@@ -779,8 +875,8 @@ class Events:
         # Power off status led !
         GPIO.output(LED, False)
 
-    @log
     @bouncesleep
+    @log
     @timer
     def door1_falling(self, channel, times):
         if times[0] > self.min_delay:
@@ -788,14 +884,14 @@ class Events:
         else:
             twit(dialog.enclosure_close_light)
 
-    @log
     @bouncesleep
+    @log
     @timer
     def door1_rising(self, channel, times):
         twit(dialog.enclosure)
 
-    @log
     @bouncesleep
+    @log
     @timer
     def door2_falling(self, channel, times):
         # Disabled ! (because too many bad detection !)
@@ -805,8 +901,8 @@ class Events:
         else:
             twit(dialog.garden_close_light)
 
-    @log
     @bouncesleep
+    @log
     @timer
     def door2_rising(self, channel, times):
         twit(dialog.garden_full)
@@ -851,21 +947,23 @@ class Events:
         else:
             falling(channel)
 
-#def read_input():
-#    return [ GPIO.input(GPIOS[index]) for index in range(0, 6) ]
-
 def get_sensor_data():
-    values = sensor.getLastValue(('vbatt', 'lux', 'temp', 'current', '1w_0', '1w_1', '1w_2'), maxage=config.MAX_AGE)
-    vbatt, lux, temp, current = values['vbatt'], values['lux'], values['temp'], values['current']
+    values = sensor.getLastValue(('vin', 'vbatt', 'vpan', 'vout', 'lux', 'temp', 'current', '1w_0', '1w_1', '1w_2'), maxage=config.MAX_AGE)
+    vin, vbatt, vpan, vout, lux, temp, current = values['vin'], values['vbatt'], values['vpan'], values['vout'], values['lux'], values['temp'], values['current']
     temp1, temp2, temp3 = values['1w_0'], values['1w_1'], values['1w_2']
 
-    logger.debug("Vin: %0.2fV, A: %0.2fA, lux: %s, Temperatures -> %s, Portes -> %s, %s, %s" % \
-        (vbatt, current, lux, get_string_from_temperatures(temp, temp1, temp2, temp3), get_status_door(0), get_status_door(1), get_status_door(2)))
+    try:
+        logger.debug("Vin: %0.2fV, Vbatt: %0.2fV, Vpan: %0.2fV, Vout: %0.2fV, A: %0.2fA, lux: %s, Temperatures -> %s, Portes -> %s, %s, %s" % \
+            (vin, vbatt, vpan, vout, current, lux, get_string_from_temperatures(temp, temp1, temp2, temp3), get_status_door(0), get_status_door(1), get_status_door(2)))
 
-    return (vbatt, lux, temp, current, temp1, temp2, temp3)
+        logger.debug("Power source (relay alim state) : %s" % ('Vin' if ALIM_IS_VIN() else 'vbatt'))
+    except TypeError:
+        pass
 
-def twit_report(vbatt, lux, temp, current, temp1, temp2, temp3, takephoto=True):
-    twit(dialog.report % (get_string_from_temperatures(temp, temp1, temp2, temp3), get_string_from_lux(lux), vbatt, current), takephoto=takephoto)
+    return (vin, vbatt, lux, temp, current, temp1, temp2, temp3)
+
+def twit_report(vin, vbatt, lux, temp, current, temp1, temp2, temp3, takephoto=True):
+    twit(dialog.report % (get_string_from_temperatures(temp, temp1, temp2, temp3), get_string_from_lux(lux), vin, current), takephoto=takephoto)
 
 
 '''
@@ -875,7 +973,6 @@ if 'webstart' in globals():
 while True:
     time.sleep(2)
 '''
-
 
 if __name__ == "__main__":
 
@@ -891,7 +988,7 @@ if __name__ == "__main__":
 
     # Wait while all sensor not ready !
     print('Waiting for sensors ready...', end='')
-    sensor.waitForSensorsReady(('vbatt', 'current', 'lux', 'temp'))
+    sensor.waitForSensorsReady(('vin', 'current', 'lux', 'temp'))
 
     while not pira.isReady():
         time.sleep(1)
@@ -918,18 +1015,20 @@ if __name__ == "__main__":
 
     help_string = '''La vie de poule
 
- ?  This help
- c  Reload config
- v  Modify verbosity
- d  Get sensor data
- t  Toggle relay
- l  Toggle led
- e  Run an egg scan
- s  Toggle status of last egg scan
+ ?      This help
+ c      Reload config
+ v      Modify verbosity
+ d      Get sensor data
+ t/T    Toggle infrared relay (low, high)
+ a/A    Toggle alimentation relay (low, high)
+ l/L    Toggle led (low, high)
+ e      Run an egg scan
+ s      Toggle status of last egg scan
+ b      Freeze database
 
  Twitter related :
- R  Send report
- P  Capture image and send it
+ R      Send report
+ P      Capture image and send it
 
  q  Exit
 '''
@@ -983,11 +1082,25 @@ Only in fake mode :
             #    twit(dialog.live_video, takevideo=True)
             elif c == 'd':
                 get_sensor_data()
-            elif c == 't':
-                GPIO.output(RELAY, not GPIO.input(RELAY))
-                logger.info('Toggle relay (%s) !' % ('on' if not GPIO.input(RELAY) else 'off'))
-            elif c == 'l':
-                GPIO.output(LED, not GPIO.input(LED))
+                print('''
+Vin:     %0.2fV
+Vbatt:   %0.2fV
+Vpan:    %0.2fV
+Vout:    %0.2fV
+Current: %0.2fA
+Lux:     %0.2f
+''' % (getvin(), getvbatt(), getvpan(), getvout(), getcurrent(), getlux()))
+
+            elif c in ('t', 'T'):
+                #GPIO.output(RELAY_IR, not GPIO.input(RELAY_IR))
+                GPIO.output(RELAY_IR, c == 'T')
+                logger.info('Toggle infrared relay (%s) !' % ('on' if not GPIO.input(RELAY_IR) else 'off'))
+            elif c in ('a', 'A'):
+                GPIO.output(RELAY_ALIM_FORCE, c == 'A') #GPIO.input(RELAY_ALIM_STATE))
+                #logger.info('Toggle alimentation relay (%s) !' % ('on' if GPIO.input(RELAY_ALIM_FORCE) else 'off'))
+                logger.info('Toggle alimentation relay (%s) !' % ('low' if GPIO.input(RELAY_ALIM_FORCE) else 'high'))
+            elif c in ('l', 'L'):
+                GPIO.output(LED, c == 'L')
                 logger.info('Toggle led (%s) !' % ('on' if GPIO.input(LED) else 'off'))
             elif c == 'e':
                 egg_count, nests = egg.scan(saveindb=False)
@@ -1008,6 +1121,15 @@ Only in fake mode :
                 db.execute(query)
 
                 print('Toggle egg detected last entry (id:%i, date:%s) to is_valid:%s' % (_id, _date, not _is_valid))
+            elif c == 'b':
+                print('Database freezed !')
+                print('Press any key to stop', end='')
+                with Atomic():
+                    while True:
+                        c = kb.getch()
+                        if c:
+                            break
+                print('...Stopped !')
 
             if config.FAKE_MODE:
                 if c in inputs:
@@ -1018,7 +1140,7 @@ Only in fake mode :
                     events.pir(PIR)
                 elif c.isdigit() and 3 < int(c) < 7:
                     name, value, validrange = (
-                        ( 'vbatt',      9,      config.VOLTAGE_ALERT ),
+                        ( 'vout',       9,      config.VOLTAGE_ALERT ),
                         ( 'current',    0.29,   config.CURRENT_ALERT ),
                         ( 'temp',       2,      config.TEMP_ALERT )
                     )[int(c) - 4]
@@ -1028,11 +1150,11 @@ Only in fake mode :
         # Collecteur oeuf ouvert ?
         if GPIO.input(SWITCH0):
             # Status led blinking
-            for status in (True, False) * 6:
+            for status in (True, False) * 3:
                 GPIO.output(LED, status)
                 time.sleep(0.5)
         else:
-            time.sleep(3)
+            time.sleep(1.5)
 
     kb.set_normal_term()
 

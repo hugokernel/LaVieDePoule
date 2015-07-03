@@ -2,7 +2,7 @@
 
 class Raspiomix_Base:
 
-    '''
+    """
     RaspiOMix version 1.0.1
     IO0 = 7
     IO1 = 11
@@ -11,11 +11,11 @@ class Raspiomix_Base:
 
     DIP0 = 12
     DIP1 = 16
-    '''
+    """
 
-    '''
+    """
     RaspiOMix version 1.1.0
-    '''
+    """
 
     IO0 = 12
     IO1 = 11
@@ -26,9 +26,24 @@ class Raspiomix_Base:
     DIP1 = 16
 
     I2C_ADC_ADDRESS = 0x6E
+    I2C_ADC0_ADDRESS = I2C_ADC_ADDRESS
+
     I2C_RTC_ADDRESS = 0x68
 
     ADC_CHANNELS = [ 0x9C, 0xBC, 0xDC, 0xFC ]
+    ADC0_CHANNELS = ADC_CHANNELS
+
+    # RaspiO'Mix+
+    I2C_ADC1_ADDRESS = 0x6A
+    ADC1_CHANNELS = [ 0xBC, 0x9C, 0xFC, 0xDC ]
+
+    IO4 = 35
+    IO5 = 33
+    IO6 = 31
+    IO7 = 29
+
+    SERIAL_TX = 8
+    SERIAL_RX = 10
 
     DEVICE = '/dev/ttyAMA0'
 
@@ -57,10 +72,18 @@ class Raspiomix(Raspiomix_Base):
 
         self.i2c = smbus.SMBus(self.i2c_bus);
 
+    def isPlus(self):
+        """Detect if board si a RaspiO'Mix+
+        """
+        try: 
+            self.i2c.read_i2c_block_data(self.I2C_ADC1_ADDRESS, 0) 
+            return True
+        except IOError:
+            return False
+
     def readAdc(self, channels=(0, 1, 2, 3)):
-        '''
-        Read analog channel
-        '''
+        """Read analog channel
+        """
 
         def format(h, m, l):
             # shift bits to product result
@@ -70,22 +93,26 @@ class Raspiomix(Raspiomix_Base):
                 t = ~(0x020000 - t)
             return t * self.ADC_MULTIPLIER
 
-        out = []
-        for channel in ((channels,) if type(channels) == int else channels):
+        def read(i2c_address, channel):
             while True:
-                data = self.i2c.read_i2c_block_data(self.I2C_ADC_ADDRESS, self.ADC_CHANNELS[channel])
+                data = self.i2c.read_i2c_block_data(i2c_address, channel)
                 h, m, l, s = data[0:4]
                 if not (s & 128):
                     break
+            return format(h, m, l)
 
-            out.append(format(h, m, l))
+        out = []
+        for channel in ((channels,) if type(channels) == int else channels):
+            i2c_address = self.I2C_ADC0_ADDRESS if channel < 4 else self.I2C_ADC1_ADDRESS
+            channel = self.ADC0_CHANNELS[channel] if channel < 4 else self.ADC1_CHANNELS[channel - 4]
+
+            out.append(read(i2c_address, channel))
 
         return out[0] if type(channels) == int else out
 
     def readRtc(self):
-        '''
-        Read rtc clock
-        '''
+        """Read rtc clock
+        """
 
         try:
             data = self.i2c.read_i2c_block_data(self.I2C_RTC_ADDRESS, 0x00)
@@ -93,8 +120,7 @@ class Raspiomix(Raspiomix_Base):
             raise IOError(str(e) + " (Maybe rtc_ds1307 module is loaded ?)")
 
         def bcd_to_int(bcd):
-            """
-            2x4bit BCD to integer
+            """2x4bit BCD to integer
             """
             out = 0
             for d in (bcd >> 4, bcd):
@@ -123,4 +149,5 @@ if __name__ == '__main__':
     print(r.readRtc())
     print(r.readAdc(0))
     print(r.readAdc((0, 1, 2, 3)))
+
 
