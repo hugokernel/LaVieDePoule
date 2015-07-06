@@ -734,7 +734,7 @@ class Twitter(threading.Thread):
 
             try:
                 mentions = self.twitter.get_mentions_timeline()
-            except TwythonAuthError as e:
+            except TwythonError as e:
                 logger.error(e)
                 time.sleep(60)
                 continue
